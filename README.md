@@ -96,3 +96,8 @@ License
 
 Contact
 - If you want, I can generate the SAM template and Go Lambda skeleton next. Which would you prefer?
+
+**Based on**
+
+This project is a serverless rework and adaptation of the original repository: https://github.com/yermakovsa/eth-watcher.  
+Credit to the original author; please refer to the original project's license and notices when reusing code.
