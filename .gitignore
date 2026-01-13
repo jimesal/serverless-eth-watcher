@@ -1,0 +1,68 @@
+# Binaries for programs and plugins
+/bin/
+/pkg/
+/*.exe
+/*.dll
+/*.so
+/*.dylib
+/*.test
+*.out
+coverage.out
+
+# Go vendor
+vendor/
+
+# Build artifacts
+*.cache
+*.tmp
+
+# Environment / secrets
+secrets/.env
+secrets/*.env
+.env
+.env.*.local
+.env.local
+
+# AWS SAM / Serverless
+.aws-sam/
+.sam/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+crash.log
+
+# Node (if used)
+node_modules/
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# Logs and runtime files
+*.log
+logs/
+tmp/
+*.pid
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+*.suo
+*.swp
+*~
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# Coverage & test output
+coverage.out
+*.coverprofile
+
+# Misc
+dist/
+build/
