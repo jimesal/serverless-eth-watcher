@@ -71,6 +71,42 @@ flowchart LR
   - This design balances operational simplicity, availability for long‑lived connections, and low cost for processing and storage.
   - If you prefer a fully serverless setup and Alchemy webhooks are available for your account, you can replace the Fargate ingestor with API Gateway -> Lambda.
 
+  Showcase goals (what this repo demonstrates)
+  - Minimal‑cost serverless implementation suitable for a portfolio: the default design favors low ongoing cost while remaining production‑relevant.
+  - Clear separation of concerns: persistent ingestion (container) vs serverless processing (Lambda + DynamoDB + SNS).
+  - Infrastructure as Code with Terraform and a deployable example so reviewers can reproduce your work.
+  - Emphasis on explainability: README documents design decisions, tradeoffs, and options for scaling/optimizing.
+
+  Cost‑conscious defaults (how this keeps costs low)
+  - Prefer webhook -> Lambda if Alchemy webhooks are available (fully serverless, avoids Fargate). This is the cheapest fully-managed option.
+  - Use SQS (cheaper) rather than Kinesis for simple buffering when ordering is not critical.
+  - Use DynamoDB On‑Demand for unpredictable/low traffic and enable TTL to purge old records.
+  - Keep Lambda memory small (128–256 MB) for simple handlers and minimize logging retention.
+  - Start resources only for demos; tear down stacks afterward with `terraform destroy` or `aws` commands.
+
+  Advanced / Production optimizations (functionality-first — higher cost)
+  If you later want to prioritize functionality, latency, durability, or scale over minimal cost, consider these upgrades:
+
+  - ElastiCache (Redis) for sliding‑window aggregation: use sorted sets (ZADD/ZRANGEBYSCORE) to maintain exact time windows with very low latency. This is ideal for sub‑second detection but requires managing a cache cluster (higher cost and operational overhead).
+
+  - DynamoDB Streams + Lambda (async aggregation): write raw transactions to DynamoDB and let Streams trigger aggregation Lambdas. This decouples ingestion and aggregation for higher throughput and operational resilience.
+
+  - Kinesis Data Streams (with enhanced fan‑out) for high throughput / ordering: if you expect a high event rate or need ordering guarantees across many consumers, Kinesis is a better fit than SQS but more expensive.
+
+  - SQS FIFO for ordered delivery with deduplication: if ordering per wallet matters and throughput is moderate, SQS FIFO provides ordering guarantees and dedupe.
+
+  - Provisioned Concurrency for Lambda: reduces cold‑start latency for latency‑sensitive alerting paths (costly if kept hot).
+
+  - Aurora Serverless or RDS for complex analytical queries: if you need relational queries, joins, or complex reporting, a serverless relational DB may be preferable to DynamoDB for those workloads (higher cost and schema management).
+
+  - EKS or ECS EC2 for large-scale ingestion fleets: if you need massive scaling or advanced orchestration, Kubernetes (EKS) provides richer scheduling and control but increases operational complexity.
+
+  - Cross‑region DynamoDB Global Tables for geo‑redundancy and low-latency reads across regions (adds replication cost).
+
+  - AWS Lambda@Edge / CloudFront for global low-latency webhook ingestion and geolocation-based routing (advanced, adds complexity & cost).
+
+  For each of these, the tradeoff is clear: improved functionality, lower latency, stronger guarantees — at the price of higher monetary cost and/or more operational work.
+
   Repository layout
   - `cmd/` - application entry points (original watcher code)
   - `internal/` - packages: `aggregator`, `notifier`, `watcher`, `config`
