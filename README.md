@@ -31,7 +31,8 @@ flowchart LR
   end
 
   C --> I
-  ````markdown
+  ````
+
   # Serverless ETH Watcher
 
   A minimal, cloud-friendly rework of the `eth-watcher` project: an Ethereum transaction watcher that detects high-volume activity for configured wallets and sends alerts.
@@ -46,21 +47,21 @@ flowchart LR
   **Architecture (high level)**
 
   ```mermaid
-  flowchart LR
-    subgraph Ingest
-      A[Alchemy WebSocket] -->|ws| B[Fargate Ingestor]
-      B -->|PutEvents| K[Kinesis / SQS]
-    end
-    K --> C[Ingest Lambda / Consumers]
-    C --> D[DynamoDB - Transactions]
-    C --> E[DynamoDB - WalletBuckets]
-    C -->|on threshold| F[SNS Topic]
-    F --> G[Notifier Lambda]
-    G --> H[Notifier Lambda -> SNS subscribers (Slack / Email / Webhook)]
-    subgraph Observability
-      I[CloudWatch Logs & Metrics]
-    end
-    B & C & G --> I
+flowchart LR
+  subgraph Ingest
+    A[Alchemy WebSocket] -->|ws| B[Fargate Ingestor]
+    B -->|PutEvents| K[Kinesis / SQS]
+  end
+  K --> C[Ingest Lambda / Consumers]
+  C --> D[DynamoDB - Transactions]
+  C --> E[DynamoDB - WalletBuckets]
+  C -->|on threshold| F[SNS Topic]
+  F --> G[Notifier Lambda]
+  G --> H[Notifier Lambda - SNS subscribers: Slack, Email, Webhook]
+  subgraph Observability
+    I[CloudWatch Logs & Metrics]
+  end
+  B & C & G --> I
   ```
 
   Why this approach
