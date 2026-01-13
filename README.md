@@ -13,18 +13,25 @@ This repository contains the code, infrastructure templates, and demo assets to 
 
 ```mermaid
 flowchart LR
-  A[Alchemy Webhooks] -->|POST| B[API Gateway (HTTP API)]
+  A[Alchemy Webhooks] -->|POST| B["API Gateway (HTTP API)"]
   B --> C[Ingest Lambda]
+
   C --> D[DynamoDB - Transactions]
   C --> E[DynamoDB - WalletBuckets]
   C -->|on threshold| F[SNS Topic]
+
   F --> G[Notifier Lambda]
-  G --> H[Telegram / Slack / Email]
-   G --> H[Notifier Lambda -> SNS subscribers (Slack / Email / Webhook)]
+  G --> H[Notification Channels]
+  H --> H1[Telegram]
+  H --> H2[Slack]
+  H --> H3[Email / Webhook]
+
   subgraph Observability
     I[CloudWatch Logs & Metrics]
   end
-  C & G --> I
+
+  C --> I
+  G --> I
 ```
 
 Why this approach
