@@ -34,6 +34,7 @@ flowchart LR
 
   C --> I
   ````
+  
 **Why this architecture**
 This is the cheapest fully managed design:
 - Alchemy Webhooks replace long-lived WebSocket connections
@@ -93,13 +94,13 @@ This is not the default because:
 - Fargate runs continuously
 - Kinesis adds cost and operational complexity
 
-Design philosophy
+**Design philosophy**
 - Start cheap and simple
 - Prefer serverless and managed services
 - Add complexity only when requirements justify it
 - This mirrors real-world cloud decision making.
 
-  Repository layout
+**Repository layout**
   - `cmd/` - application entry points (original watcher code)
   - `internal/` - packages: `aggregator`, `notifier`, `watcher`, `config`
   - `infra/` - SAM or Terraform templates (to be added)
@@ -129,8 +130,4 @@ This project is a rework and adaptation of the original repository: https://gith
 - Configuration structure
 
 The main change is architectural: moving from a local, long-running WebSocket process to a serverless, event-driven AWS design.
-
-
-
-
   ````
