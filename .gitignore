@@ -66,3 +66,8 @@ coverage.out
 # Misc
 dist/
 build/
+
+# Ignore any dist/build folders in subdirectories (e.g. services/*/dist)
+**/dist/
+**/build/
+
