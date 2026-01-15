@@ -101,11 +101,15 @@ This is not the default because:
 - This mirrors real-world cloud decision making.
 
 **Repository layout**
-  - `cmd/` - application entry points (original watcher code)
-  - `internal/` - packages: `aggregator`, `notifier`, `watcher`, `config`
-  - `infra/` - SAM or Terraform templates (to be added)
-  - `examples/` - sample payloads and demo scripts
-  - `.github/workflows/` - CI/CD workflows
+  - `README.md` - project overview and instructions
+  - `services/` - serverless services (each with its own `package.json`, `src/`, `test/`, and `dist/`)
+    - `services/ingest/` - ingestion Lambda (source, tests, mock payloads, build output)
+    - `services/notifier/` - notifier Lambda (notification delivery logic)
+  - `infra/terraform/` - Terraform configuration for API Gateway, DynamoDB, SNS, Lambdas
+  - `test/` - shared integration tests and `mock_payloads/` for end-to-end testing
+  - `.github/workflows/` - CI (build, test, terraform plan)
+  - `scripts/` - helper scripts (build, package, deploy)
+  - `env.example` - documented environment variable names and example values
 
 **Who this project is for**
 

@@ -5,7 +5,8 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const mockPath = path.join(__dirname, 'mock_events', 'wrapped_mock_event.json');
+// updated path: mock events moved under src/mock_events
+const mockPath = path.join(__dirname, '..', 'mock_events', 'wrapped_mock_event.json');
 const mock = JSON.parse(await fs.readFile(mockPath, 'utf8'));
 
 // inject test env vars BEFORE importing the compiled handler so top-level
@@ -13,16 +14,31 @@ const mock = JSON.parse(await fs.readFile(mockPath, 'utf8'));
 process.env.TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE ?? 'test_transactions';
 process.env.WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? 'test_buckets';
 
-// build target compiled handler (ESM) path
-const compiledPath = path.join(__dirname, '../src/compiled/handlerWithoutNotification.js');
+// build target compiled handler path (updated after moving files)
+const compiledPath = path.join(__dirname, '../dist/handlerWithoutNotification.js');
 const compiledUrl = pathToFileURL(compiledPath).href;
 
 let handlerModule;
 try {
   handlerModule = await import(compiledUrl);
 } catch (e) {
-  console.error('Failed to import compiled handler at', compiledUrl, e);
-  process.exit(1);
+  // If import fails (e.g. compiled bundle is CommonJS or package.json forces modules),
+  // try requiring a .cjs wrapper if present, else try requiring the JS file directly.
+  try {
+    const { createRequire } = await import('module');
+    const require = createRequire(import.meta.url);
+    const compiledCjsPath = compiledPath.replace(/\.js$/i, '.cjs');
+    try {
+      // prefer .cjs wrapper
+      handlerModule = require(compiledCjsPath);
+    } catch (eReq) {
+      handlerModule = require(compiledPath);
+    }
+  } catch (e2) {
+    console.error('Failed to import compiled handler at', compiledUrl, e);
+    console.error('Also failed to require compiled handler:', e2);
+    process.exit(1);
+  }
 }
 
 // create mock ddb that logs calls

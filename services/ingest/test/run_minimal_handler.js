@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const mockPath = path.join(__dirname, 'mock_events', 'wrapped_mock_event.json');
+const mockPath = path.join(__dirname, '../mock_events/wrapped_mock_event.json');
 let mock;
 try {
   mock = JSON.parse(await fs.readFile(mockPath, 'utf8'));
@@ -14,7 +14,7 @@ try {
   process.exit(1);
 }
 
-const handlerModulePath = path.join(__dirname, '../src/compiled/minimalHandler.js');
+const handlerModulePath = path.join(__dirname, '../dist/minimalHandler.js');
 const handlerModuleUrl = pathToFileURL(handlerModulePath).href;
 let handlerModule;
 try {
