@@ -21,30 +21,41 @@ const BUCKET_SIZE_SECONDS = envInt("BUCKET_SIZE_SECONDS", 60);
 
 type Direction = "from" | "to";
 
-type WebhookEvent = {
+// Alchemy address-activity webhook shape (trimmed to fields we use)
+type AlchemyActivityShape = {
   id?: string;
   type?: string;
-  transaction: {
-    hash: string;
-    from: string;
-    to: string;
-    value: string; // hex wei, e.g. "0x123..."
+  event: {
+    activity: Array<{
+      hash?: string;
+      fromAddress?: string;
+      toAddress?: string;
+      asset?: string;
+      // Alchemy may include a numeric `value` when normalized, or a rawContract
+      value?: number;
+      rawContract?: { rawValue?: string; decimals?: number };
+    }>;
   };
 };
+
+type IncomingBody = AlchemyActivityShape;
 
 
 export const handler = async (
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyResultV2> => {
-  let body: unknown;
+  let body: IncomingBody;
   try {
-    body = event.body ? JSON.parse(event.body) : {};
+    body = event.body ? (JSON.parse(event.body) as IncomingBody) : ({} as IncomingBody);
   } catch (e) {
     return resp(400, `invalid json: ${(e as Error).message}`);
   }
 
   const parsed = parseWebhook(body);
-  if (!parsed.ok) return resp(400, parsed.error);
+  if (!parsed.ok) {
+    if (parsed.error === "non-eth-asset") return resp(200, "ignored non-ETH asset");
+    return resp(400, parsed.error);
+  }
 
   const { txHash, from, to, amountEth, raw } = parsed.data;
 
@@ -91,102 +102,27 @@ export const handler = async (
 
 /* ---------------- Parsing ---------------- */
 
-function parseWebhook(input: unknown):
-  | { ok: true; data: { txHash: string; from: string; to: string; amountEth: number; raw: WebhookEvent } }
+function parseWebhook(input: IncomingBody):
+  | { ok: true; data: { txHash: string; from: string; to: string; amountEth: number; raw: IncomingBody } }
   | { ok: false; error: string } {
   if (!input || typeof input !== "object") return { ok: false, error: "body must be an object" };
-  // Support two shapes:
-  // 1) Alchemy: { event: { activity: [ { hash, fromAddress, toAddress, value?, rawContract? } ] } }
-  // 2) Simple: { transaction: { hash, from, to, value } }
 
-  const maybe = input as any;
+  const act = input.event.activity[0];
 
-  // Alchemy activity array
-  const act = maybe?.event?.activity && Array.isArray(maybe.event.activity) && maybe.event.activity.length > 0
-    ? maybe.event.activity[0]
-    : null;
+  // If asset is present and not ETH, ignore
+  if (act.asset && act.asset !== "ETH") return { ok: false, error: "non-eth-asset" };
+  const txHash = typeof act.hash === "string" ? act.hash : "";
+  const from = typeof act.fromAddress === "string" ? act.fromAddress : "";
+  const to = typeof act.toAddress === "string" ? act.toAddress : "";
 
-  if (act) {
-    const txHash = normAddr(act.hash, false);
-    const from = normAddr(act.fromAddress, true);
-    const to = normAddr(act.toAddress, true);
+  if (!txHash) return { ok: false, error: "missing activity.hash" };
+  if (!from) return { ok: false, error: "missing activity.fromAddress" };
+  if (!to) return { ok: false, error: "missing activity.toAddress" };
 
-    if (!txHash) return { ok: false, error: "missing activity.hash" };
-    if (!from) return { ok: false, error: "missing activity.fromAddress" };
-    if (!to) return { ok: false, error: "missing activity.toAddress" };
-
-    // amount: prefer numeric `value`, else decode rawContract.rawValue using decimals
-    let amount = 0;
-    if (typeof act.value === "number") {
-      amount = act.value;
-    } else if (act.rawContract && typeof act.rawContract.rawValue === "string") {
-      const rawVal = (act.rawContract.rawValue as string).toLowerCase();
-      const decimals = typeof act.rawContract.decimals === "number" ? act.rawContract.decimals : 18;
-      try {
-        const hex = rawVal.startsWith("0x") ? rawVal.slice(2) : rawVal;
-        const bi = BigInt("0x" + hex);
-        const denom = 10n ** BigInt(decimals);
-        const whole = bi / denom;
-        const frac = bi % denom;
-        amount = Number(whole) + Number(frac) / Number(denom);
-      } catch {
-        amount = 0;
-      }
-    }
-
-    return { ok: true, data: { txHash, from, to, amountEth: amount, raw: maybe as WebhookEvent } };
-  }
-
-  // Fallback: simple transaction shape
-  const raw = input as Partial<WebhookEvent>;
-  const tx = raw.transaction;
-  if (!tx) return { ok: false, error: "missing transaction" };
-
-  const txHash = normAddr(tx.hash, false);
-  const from = normAddr(tx.from, true);
-  const to = normAddr(tx.to, true);
-  const value = typeof tx.value === "string" ? tx.value.trim() : "";
-
-  if (!txHash) return { ok: false, error: "missing transaction.hash" };
-  if (!from) return { ok: false, error: "missing transaction.from" };
-  if (!to) return { ok: false, error: "missing transaction.to" };
-  if (!value) return { ok: false, error: "missing transaction.value" };
-
-  const amountEth = parseEthFromHexWei(value);
-  return { ok: true, data: { txHash, from, to, amountEth, raw: raw as WebhookEvent } };
+  // amount: we know act.value is a already normalized by Alchemy for ETH transfers
+  return { ok: true, data: { txHash, from, to, amountEth: act.value as number, raw: input } };
 }
 
-function normAddr(v: unknown, isAddr: boolean): string {
-  if (typeof v !== "string") return "";
-  const s = v.trim().toLowerCase();
-  if (!s) return "";
-  if (isAddr && !s.startsWith("0x")) return "";
-  return s;
-}
-
-// hex wei -> ETH number
-function parseEthFromHexWei(hexWei: string): number {
-  const cleaned = hexWei.toLowerCase().startsWith("0x")
-    ? hexWei.slice(2)
-    : hexWei;
-  if (!cleaned) return 0;
-
-  // Use BigInt to avoid precision loss during division
-  let wei: bigint;
-  try {
-    wei = BigInt("0x" + cleaned);
-  } catch {
-    return 0;
-  }
-
-  const weiPerEth = 1_000_000_000_000_000_000n;
-  const whole = wei / weiPerEth;
-  const frac = wei % weiPerEth;
-
-  // Convert to JS number with limited precision (enough for alerting & sums)
-  const fracNum = Number(frac) / 1e18;
-  return Number(whole) + fracNum;
-}
 
 /* ---------------- DynamoDB: Transactions (idempotency) ---------------- */
 
@@ -196,7 +132,7 @@ async function putTransactionIfNew(args: {
   wallet: string;
   amountEth: number;
   ts: number;
-  raw: WebhookEvent;
+  raw: IncomingBody;
 }): Promise<boolean /* alreadyProcessed */> {
   const pk = `tx#${args.txHash}#${args.direction}`;
 

@@ -10,7 +10,7 @@
 		"skipLibCheck": true,
 		"strict": true,
 		"resolveJsonModule": true,
-		"types": ["node", "mocha"]
+		"types": ["node", "mocha", "jest"]
 	},
 	"include": ["src/**/*.ts", "test/**/*.ts"]
 }

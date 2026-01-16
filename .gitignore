@@ -63,6 +63,12 @@ Thumbs.db
 coverage.out
 *.coverprofile
 
+# Jest configs (managed locally per developer)
+jest.config.*
+**/jest.config.*
+# VS Code Jest data
+.vscode-jest/**
+
 # Misc
 dist/
 build/

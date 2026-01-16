@@ -26,7 +26,10 @@ export const handler = async (
 
   return {
     statusCode: 200,
-    headers: { "content-type": "text/plain" },
-    body: "ok",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      message: "ok",
+      payload: parsed,
+    }),
   };
 };
