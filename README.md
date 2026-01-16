@@ -60,6 +60,10 @@ It is ideal for low to moderate traffic, demos, and early production workloads.
 5. Threshold breaches publish events to SNS
 6. Notifier Lambda sends alerts to configured channels
 
+**Data handling assumptions**
+- Only ETH transfers are persisted. Non-ETH assets (USDC, ERC20s, NFTs, etc.) are explicitly ignored so that DynamoDB stores exclusively ETH activity.
+- Payload normalization (addresses, values, decimals, hashes) is assumed to be handled by the Alchemy webhook service. Additional normalization or schema validation is out of scope for this project to keep the ingestion path lean.
+
   **Alternative architecture (more expensive, more robust)**
 
   ```mermaid
