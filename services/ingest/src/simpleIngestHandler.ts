@@ -21,6 +21,13 @@ const BUCKET_SIZE_SECONDS = envInt("BUCKET_SIZE_SECONDS", 60);
 
 type Direction = "from" | "to";
 
+type ParsedActivity = {
+  txHash: string;
+  from: string;
+  to: string;
+  amountEth: number;
+};
+
 // Alchemy address-activity webhook shape (trimmed to fields we use)
 type AlchemyActivityShape = {
   id?: string;
@@ -53,47 +60,49 @@ export const handler = async (
 
   const parsed = parseWebhook(body);
   if (!parsed.ok) {
-    if (parsed.error === "non-eth-asset") return resp(200, "ignored non-ETH asset");
     return resp(400, parsed.error);
   }
 
-  const { txHash, from, to, amountEth, raw } = parsed.data;
+  const { activities, raw } = parsed.data;
+  if (activities.length === 0) return resp(200, "ignored non-ETH asset");
 
   const now = Math.floor(Date.now() / 1000);
   const bucketStart = bucketStartEpoch(now, BUCKET_SIZE_SECONDS);
 
-  // Track both directions (matches your original watcher logic conceptually)
-  const targets: Array<{ direction: Direction; wallet: string }> = [
-    { direction: "from", wallet: from },
-    { direction: "to", wallet: to },
-  ];
+  for (const tx of activities) {
+    // Track both directions for each ETH activity
+    const targets: Array<{ direction: Direction; wallet: string }> = [
+      { direction: "from", wallet: tx.from },
+      { direction: "to", wallet: tx.to },
+    ];
 
-  for (const t of targets) {
-    // 1) Idempotency: Put tx record only if new (txHash+direction)
-    const alreadyProcessed = await putTransactionIfNew({
-      txHash,
-      direction: t.direction,
-      wallet: t.wallet,
-      amountEth,
-      ts: now,
-      raw,
-    });
+    for (const t of targets) {
+      // 1) Idempotency: Put tx record only if new (txHash+direction)
+      const alreadyProcessed = await putTransactionIfNew({
+        txHash: tx.txHash,
+        direction: t.direction,
+        wallet: t.wallet,
+        amountEth: tx.amountEth,
+        ts: now,
+        raw,
+      });
 
-    if (alreadyProcessed) {
-      // This tx+direction was already counted; skip bucket update.
-      continue;
+      if (alreadyProcessed) {
+        // This tx+direction was already counted; skip bucket update.
+        continue;
+      }
+
+      // 2) Add to bucket sum (rolling window implemented as bucketed counters)
+      await addToWalletBucket({
+        direction: t.direction,
+        wallet: t.wallet,
+        bucketStart,
+        amountEth: tx.amountEth,
+        now,
+      });
+
+      // no notification logic: only record transaction and update bucket
     }
-
-    // 2) Add to bucket sum (rolling window implemented as bucketed counters)
-    await addToWalletBucket({
-      direction: t.direction,
-      wallet: t.wallet,
-      bucketStart,
-      amountEth,
-      now,
-    });
-
-    // no notification logic: only record transaction and update bucket
   }
 
   // Always 200 so webhook sender doesn't retry unnecessarily
@@ -103,24 +112,34 @@ export const handler = async (
 /* ---------------- Parsing ---------------- */
 
 function parseWebhook(input: IncomingBody):
-  | { ok: true; data: { txHash: string; from: string; to: string; amountEth: number; raw: IncomingBody } }
+  | { ok: true; data: { raw: IncomingBody; activities: ParsedActivity[] } }
   | { ok: false; error: string } {
   if (!input || typeof input !== "object") return { ok: false, error: "body must be an object" };
 
-  const act = input.event.activity[0];
+  const activity = input.event?.activity;
+  if (!Array.isArray(activity)) {
+    return { ok: false, error: "event.activity must be an array" };
+  }
 
-  // If asset is present and not ETH, ignore
-  if (act.asset && act.asset !== "ETH") return { ok: false, error: "non-eth-asset" };
-  const txHash = typeof act.hash === "string" ? act.hash : "";
-  const from = typeof act.fromAddress === "string" ? act.fromAddress : "";
-  const to = typeof act.toAddress === "string" ? act.toAddress : "";
+  const parsedActivities: ParsedActivity[] = [];
+  for (const act of activity) {
+    if (!act || typeof act !== "object") continue;
+    if (act.asset && act.asset !== "ETH") continue;
 
-  if (!txHash) return { ok: false, error: "missing activity.hash" };
-  if (!from) return { ok: false, error: "missing activity.fromAddress" };
-  if (!to) return { ok: false, error: "missing activity.toAddress" };
+    const txHash = typeof act.hash === "string" ? act.hash : "";
+    const from = typeof act.fromAddress === "string" ? act.fromAddress : "";
+    const to = typeof act.toAddress === "string" ? act.toAddress : "";
+    const value = typeof act.value === "number" ? act.value : Number.NaN;
 
-  // amount: we know act.value is a already normalized by Alchemy for ETH transfers
-  return { ok: true, data: { txHash, from, to, amountEth: act.value as number, raw: input } };
+    if (!txHash) return { ok: false, error: "missing activity.hash" };
+    if (!from) return { ok: false, error: "missing activity.fromAddress" };
+    if (!to) return { ok: false, error: "missing activity.toAddress" };
+    if (!Number.isFinite(value)) return { ok: false, error: "missing activity.value" };
+
+    parsedActivities.push({ txHash, from, to, amountEth: value });
+  }
+
+  return { ok: true, data: { raw: input, activities: parsedActivities } };
 }
 
 

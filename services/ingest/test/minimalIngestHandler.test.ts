@@ -14,7 +14,7 @@ describe('minimal handler runner converted to test', () => {
     process.env.WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? 'test_buckets';
 
     // Import the source module (not compiled artifact) so ts-jest can map sourcemaps
-    handlerMod = await import('../src/minimalHandler');
+    handlerMod = await import('../src/minimalIngestHandler');
   });
 
   test('logs received Alchemy payload and returns 200', async () => {

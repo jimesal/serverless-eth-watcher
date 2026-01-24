@@ -14,25 +14,29 @@ describe('simple ingest handler runner converted to test', () => {
   beforeAll(async () => {
     const baseDir = path.resolve(process.cwd(), 'services', 'ingest');
     const mockPath = path.join(baseDir, 'mock_events', 'wrapped_mock_event.json');
-    nonEthEvent = JSON.parse(await fs.readFile(mockPath, 'utf8')) as APIGatewayProxyEventV2;
+    const baseEvent = JSON.parse(await fs.readFile(mockPath, 'utf8')) as APIGatewayProxyEventV2;
 
-    if (!nonEthEvent.body) throw new Error('wrapped mock event is missing body');
-    const parsedPayload = JSON.parse(nonEthEvent.body);
+    if (!baseEvent.body) throw new Error('wrapped mock event is missing body');
+    const parsedPayload = JSON.parse(baseEvent.body);
+    const activities = parsedPayload?.event?.activity;
+    if (!Array.isArray(activities)) throw new Error('wrapped mock event missing activity array');
 
-    const ethActivity = parsedPayload.event.activity.find((a: any) => a.asset === 'ETH');
-    if (!ethActivity) throw new Error('expected ETH activity in wrapped mock event');
+    const ethActivities = activities.filter((a: any) => a.asset === 'ETH');
+    if (ethActivities.length === 0) throw new Error('expected ETH activity in wrapped mock event');
 
-    const ethPayload = {
-      ...parsedPayload,
-      event: {
-        ...parsedPayload.event,
-        activity: [ethActivity]
-      }
-    };
+    const nonEthActivities = activities.filter((a: any) => a.asset !== 'ETH');
+    if (nonEthActivities.length === 0) throw new Error('expected at least one non-ETH activity in wrapped mock event');
 
-    ethEvent = {
-      ...nonEthEvent,
-      body: JSON.stringify(ethPayload)
+    ethEvent = JSON.parse(JSON.stringify(baseEvent));
+    nonEthEvent = {
+      ...baseEvent,
+      body: JSON.stringify({
+        ...parsedPayload,
+        event: {
+          ...parsedPayload.event,
+          activity: nonEthActivities
+        }
+      })
     };
 
     // env vars must exist before the handler module is evaluated

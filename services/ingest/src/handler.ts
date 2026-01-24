@@ -29,15 +29,29 @@ const BUCKET_SIZE_SECONDS = envInt("BUCKET_SIZE_SECONDS", 60);
 
 type Direction = "from" | "to";
 
+type AlchemyActivity = {
+  hash?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  asset?: string;
+  value?: number;
+  rawContract?: { rawValue?: string; decimals?: number };
+};
+
 type WebhookEvent = {
   id?: string;
   type?: string;
-  transaction: {
-    hash: string;
-    from: string;
-    to: string;
-    value: string; // hex wei, e.g. "0x123..."
+  event?: {
+    network?: string;
+    activity?: Array<AlchemyActivity>;
   };
+};
+
+type ParsedActivity = {
+  txHash: string;
+  from: string;
+  to: string;
+  amountEth: number;
 };
 
 type ThresholdMessage = {
@@ -64,77 +78,79 @@ export const handler = async (
   const parsed = parseWebhook(body);
   if (!parsed.ok) return resp(400, parsed.error);
 
-  const { txHash, from, to, amountEth, raw } = parsed.data;
+  const { activities, raw } = parsed.data;
+  if (activities.length === 0) return resp(200, "ignored non-ETH asset");
 
   const now = Math.floor(Date.now() / 1000);
   const bucketStart = bucketStartEpoch(now, BUCKET_SIZE_SECONDS);
 
-  // Track both directions (matches your original watcher logic conceptually)
-  const targets: Array<{ direction: Direction; wallet: string }> = [
-    { direction: "from", wallet: from },
-    { direction: "to", wallet: to },
-  ];
+  for (const tx of activities) {
+    const targets: Array<{ direction: Direction; wallet: string }> = [
+      { direction: "from", wallet: tx.from },
+      { direction: "to", wallet: tx.to },
+    ];
 
-  for (const t of targets) {
-    // 1) Idempotency: Put tx record only if new (txHash+direction)
-    const alreadyProcessed = await putTransactionIfNew({
-      txHash,
-      direction: t.direction,
-      wallet: t.wallet,
-      amountEth,
-      ts: now,
-      raw,
-    });
+    for (const t of targets) {
+      // 1) Idempotency: Put tx record only if new (txHash+direction)
+      const alreadyProcessed = await putTransactionIfNew({
+        txHash: tx.txHash,
+        direction: t.direction,
+        wallet: t.wallet,
+        amountEth: tx.amountEth,
+        ts: now,
+        raw,
+      });
 
-    if (alreadyProcessed) {
-      // This tx+direction was already counted; skip bucket update.
-      continue;
-    }
+      if (alreadyProcessed) {
+        // This tx+direction was already counted; skip bucket update.
+        continue;
+      }
 
-    // 2) Add to bucket sum (rolling window implemented as bucketed counters)
-    await addToWalletBucket({
-      direction: t.direction,
-      wallet: t.wallet,
-      bucketStart,
-      amountEth,
-      now,
-    });
+      // 2) Add to bucket sum (rolling window implemented as bucketed counters)
+      await addToWalletBucket({
+        direction: t.direction,
+        wallet: t.wallet,
+        bucketStart,
+        amountEth: tx.amountEth,
+        now,
+      });
 
-    // 3) Sum window and alert if exceeded + cooldown allows
-    const total = await sumWindow({
-      direction: t.direction,
-      wallet: t.wallet,
-      now,
-    });
-
-    if (SNS_TOPIC_ARN && total >= THRESHOLD_ETH) {
-      const okToAlert = await checkAndSetCooldown({
+      // 3) Sum window and alert if exceeded + cooldown allows
+      const total = await sumWindow({
         direction: t.direction,
         wallet: t.wallet,
         now,
       });
 
-      if (okToAlert) {
-        const msg: ThresholdMessage = {
-          txHash,
+      if (SNS_TOPIC_ARN && total >= THRESHOLD_ETH) {
+        const okToAlert = await checkAndSetCooldown({
           direction: t.direction,
           wallet: t.wallet,
-          totalEth: total,
-          windowSec: WINDOW_SECONDS,
-          timestamp: now,
-          source: "alchemy-webhook",
-          requestId: event.requestContext?.requestId,
-        };
-        // Don’t fail ingestion if SNS fails
-        try {
-          await sns.send(
-            new PublishCommand({
-              TopicArn: SNS_TOPIC_ARN,
-              Message: JSON.stringify(msg),
-            })
-          );
-        } catch (e) {
-          console.warn("SNS publish failed:", e);
+          now,
+        });
+
+        if (okToAlert) {
+          const msg: ThresholdMessage = {
+            txHash: tx.txHash,
+            direction: t.direction,
+            wallet: t.wallet,
+            totalEth: total,
+            windowSec: WINDOW_SECONDS,
+            timestamp: now,
+            source: "alchemy-webhook",
+            requestId: event.requestContext?.requestId,
+          };
+          // Don’t fail ingestion if SNS fails
+          try {
+            await sns.send(
+              new PublishCommand({
+                TopicArn: SNS_TOPIC_ARN,
+                Message: JSON.stringify(msg),
+              })
+            );
+          } catch (e) {
+            console.warn("SNS publish failed:", e);
+          }
         }
       }
     }
@@ -147,26 +163,33 @@ export const handler = async (
 /* ---------------- Parsing ---------------- */
 
 function parseWebhook(input: unknown):
-  | { ok: true; data: { txHash: string; from: string; to: string; amountEth: number; raw: WebhookEvent } }
+  | { ok: true; data: { raw: WebhookEvent; activities: ParsedActivity[] } }
   | { ok: false; error: string } {
   if (!input || typeof input !== "object") return { ok: false, error: "body must be an object" };
 
-  const raw = input as Partial<WebhookEvent>;
-  const tx = raw.transaction;
-  if (!tx) return { ok: false, error: "missing transaction" };
+  const raw = input as WebhookEvent;
+  const activity = raw.event?.activity;
+  if (!Array.isArray(activity)) return { ok: false, error: "event.activity must be an array" };
 
-  const txHash = normAddr(tx.hash, false);
-  const from = normAddr(tx.from, true);
-  const to = normAddr(tx.to, true);
-  const value = typeof tx.value === "string" ? tx.value.trim() : "";
+  const parsed: ParsedActivity[] = [];
+  for (const act of activity) {
+    if (!act || typeof act !== "object") continue;
+    if (act.asset && act.asset !== "ETH") continue;
 
-  if (!txHash) return { ok: false, error: "missing transaction.hash" };
-  if (!from) return { ok: false, error: "missing transaction.from" };
-  if (!to) return { ok: false, error: "missing transaction.to" };
-  if (!value) return { ok: false, error: "missing transaction.value" };
+    const txHash = normAddr(act.hash, false);
+    const from = normAddr(act.fromAddress, true);
+    const to = normAddr(act.toAddress, true);
+    const value = typeof act.value === "number" ? act.value : Number.NaN;
 
-  const amountEth = parseEthFromHexWei(value);
-  return { ok: true, data: { txHash, from, to, amountEth, raw: raw as WebhookEvent } };
+    if (!txHash) return { ok: false, error: "missing activity.hash" };
+    if (!from) return { ok: false, error: "missing activity.fromAddress" };
+    if (!to) return { ok: false, error: "missing activity.toAddress" };
+    if (!Number.isFinite(value)) return { ok: false, error: "missing activity.value" };
+
+    parsed.push({ txHash, from, to, amountEth: value });
+  }
+
+  return { ok: true, data: { raw, activities: parsed } };
 }
 
 function normAddr(v: unknown, isAddr: boolean): string {
@@ -175,30 +198,6 @@ function normAddr(v: unknown, isAddr: boolean): string {
   if (!s) return "";
   if (isAddr && !s.startsWith("0x")) return "";
   return s;
-}
-
-// hex wei -> ETH number
-function parseEthFromHexWei(hexWei: string): number {
-  const cleaned = hexWei.toLowerCase().startsWith("0x")
-    ? hexWei.slice(2)
-    : hexWei;
-  if (!cleaned) return 0;
-
-  // Use BigInt to avoid precision loss during division
-  let wei: bigint;
-  try {
-    wei = BigInt("0x" + cleaned);
-  } catch {
-    return 0;
-  }
-
-  const weiPerEth = 1_000_000_000_000_000_000n;
-  const whole = wei / weiPerEth;
-  const frac = wei % weiPerEth;
-
-  // Convert to JS number with limited precision (enough for alerting & sums)
-  const fracNum = Number(frac) / 1e18;
-  return Number(whole) + fracNum;
 }
 
 /* ---------------- DynamoDB: Transactions (idempotency) ---------------- */
