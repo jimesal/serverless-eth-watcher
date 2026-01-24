@@ -61,6 +61,7 @@ Thumbs.db
 
 # Coverage & test output
 coverage.out
+coverage/
 *.coverprofile
 
 # Jest configs (managed locally per developer)

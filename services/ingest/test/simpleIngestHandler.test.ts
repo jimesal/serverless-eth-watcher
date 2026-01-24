@@ -1,43 +1,26 @@
-import fs from 'fs/promises';
-import path from 'path';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { mixedAssetsActivity, noETHAssetActivity } from '../mock_events/wrapped_mock_event';
 
 describe('simple ingest handler runner converted to test', () => {
   let nonEthEvent: APIGatewayProxyEventV2;
   let ethEvent: APIGatewayProxyEventV2;
+  let ethActivityCount: number;
   let handlerModule: typeof import('../src/simpleIngestHandler');
   let mockSend: jest.Mock;
   let insertedItems: Array<Record<string, unknown>>;
   let bucketUpdates: Array<Record<string, unknown>>;
 
   beforeAll(async () => {
-    const baseDir = path.resolve(process.cwd(), 'services', 'ingest');
-    const mockPath = path.join(baseDir, 'mock_events', 'wrapped_mock_event.json');
-    const baseEvent = JSON.parse(await fs.readFile(mockPath, 'utf8')) as APIGatewayProxyEventV2;
+    ethEvent = JSON.parse(JSON.stringify(mixedAssetsActivity));
+    nonEthEvent = JSON.parse(JSON.stringify(noETHAssetActivity));
 
-    if (!baseEvent.body) throw new Error('wrapped mock event is missing body');
-    const parsedPayload = JSON.parse(baseEvent.body);
-    const activities = parsedPayload?.event?.activity;
-    if (!Array.isArray(activities)) throw new Error('wrapped mock event missing activity array');
-
-    const ethActivities = activities.filter((a: any) => a.asset === 'ETH');
-    if (ethActivities.length === 0) throw new Error('expected ETH activity in wrapped mock event');
-
-    const nonEthActivities = activities.filter((a: any) => a.asset !== 'ETH');
-    if (nonEthActivities.length === 0) throw new Error('expected at least one non-ETH activity in wrapped mock event');
-
-    ethEvent = JSON.parse(JSON.stringify(baseEvent));
-    nonEthEvent = {
-      ...baseEvent,
-      body: JSON.stringify({
-        ...parsedPayload,
-        event: {
-          ...parsedPayload.event,
-          activity: nonEthActivities
-        }
-      })
-    };
+    const parsedEthBody = ethEvent.body ? JSON.parse(ethEvent.body) : null;
+    const activities = parsedEthBody?.event?.activity ?? [];
+    ethActivityCount = activities.filter((act: any) => act.asset === 'ETH').length;
+    if (ethActivityCount === 0) {
+      throw new Error('mixedAssetsActivity fixture must include at least one ETH transfer');
+    }
 
     // env vars must exist before the handler module is evaluated
     process.env.TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE ?? 'test_transactions';
@@ -94,11 +77,22 @@ describe('simple ingest handler runner converted to test', () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe('ok');
 
-    // two directions -> two PutCommands and two UpdateCommands
-    expect(insertedItems).toHaveLength(2);
-    expect(bucketUpdates).toHaveLength(2);
-    const directions = insertedItems.map((i) => i.direction).sort();
-    expect(directions).toEqual(['from', 'to']);
-    expect(mockSend).toHaveBeenCalledTimes(4);
+    const expectedRecords = ethActivityCount * 2; // from + to
+    expect(insertedItems).toHaveLength(expectedRecords);
+    expect(bucketUpdates).toHaveLength(expectedRecords);
+
+    const directionCounts = insertedItems.reduce<Record<string, number>>((acc, item) => {
+      const key = String(item.direction);
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    expect(directionCounts.from).toBe(ethActivityCount);
+    expect(directionCounts.to).toBe(ethActivityCount);
+
+    const uniqueTransactionDirections = new Set(insertedItems.map((i) => i.pk));
+    expect(uniqueTransactionDirections.size).toBe(expectedRecords);
+
+    expect(mockSend).toHaveBeenCalledTimes(expectedRecords * 2); // Put + Update for each direction
   });
 });
