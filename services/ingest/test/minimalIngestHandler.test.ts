@@ -1,14 +1,12 @@
-import fs from 'fs/promises';
-import path from 'path';
+import type { APIGatewayProxyEventV2 } from 'aws-lambda';
+import { mixedAssetsActivity } from '../mock_events/wrapped_mock_event';
 
 describe('minimal handler runner converted to test', () => {
-  let mockEvent: any;
+  let mockEvent: APIGatewayProxyEventV2;
   let handlerMod: any;
 
   beforeAll(async () => {
-    const baseDir = path.resolve(process.cwd(), 'services', 'ingest');
-    const mockPath = path.join(baseDir, './mock_events/wrapped_mock_event.json');
-    mockEvent = JSON.parse(await fs.readFile(mockPath, 'utf8')) as any;
+    mockEvent = JSON.parse(JSON.stringify(mixedAssetsActivity));
 
     process.env.TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE ?? 'test_transactions';
     process.env.WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? 'test_buckets';

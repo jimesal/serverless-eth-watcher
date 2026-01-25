@@ -1,0 +1,156 @@
+export interface AddressActivityWebhook {
+  webhookId: string;
+  id: string;
+  createdAt: string;
+  type: 'ADDRESS_ACTIVITY';
+  event: AddressActivityEvent;
+}
+
+export interface ActivityLog {
+  address: string;
+  blockHash: string;
+  blockNumber: string;
+  data: string;
+  logIndex: string;
+  removed: boolean;
+  topics: string[];
+  transactionHash: string;
+  transactionIndex: string;
+}
+
+export interface RawContract {
+  address: string;
+  decimals: number;
+  rawValue: string;
+}
+
+export interface AddressActivityEntry {
+  asset: string;
+  blockNum: string;
+  category: string;
+  erc1155Metadata: unknown;
+  erc721TokenId: string | null;
+  fromAddress: string;
+  hash: string;
+  log: ActivityLog;
+  rawContract: RawContract;
+  toAddress: string;
+  typeTraceAddress: string | null;
+  value: number;
+}
+
+export interface AddressActivityEvent {
+  network: string;
+  activity: AddressActivityEntry[];
+}
+
+export const mockAddressActivityEvent: AddressActivityWebhook = {
+  webhookId: 'wh_ac5sekedy2t7n2gs',
+  id: 'whevt_pz2qu8k04anfjknt',
+  createdAt: '2024-09-25T13:52:47.561987389Z',
+  type: 'ADDRESS_ACTIVITY',
+  event: {
+    network: 'ETH_MAINNET',
+    activity: [
+      {
+        asset: 'USDC',
+        blockNum: '0xdf34a3',
+        category: 'token',
+        erc1155Metadata: null,
+        erc721TokenId: null,
+        fromAddress: '0x503828976d22510aad0201ac7ec88293211d23da',
+        hash: '0x7a4a39da2a3fa1fc2ef88fd1eaea070286ed2aba21e0419dcfb6d5c5d9f02a72',
+        log: {
+          address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+          blockHash: '0xa99ec54413bd3db3f9bdb0c1ad3ab1400ee0ecefb47803e17f9d33bc4d0a1e91',
+          blockNumber: '0xdf34a3',
+          data: '0x0000000000000000000000000000000000000000000000000000000011783b21',
+          logIndex: '0x6e',
+          removed: false,
+          topics: [
+            '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+            '0x000000000000000000000000503828976d22510aad0201ac7ec88293211d23da',
+            '0x000000000000000000000000be3f4b43db5eb49c1f48f53443b9abce45da3b79',
+          ],
+          transactionHash: '0x7a4a39da2a3fa1fc2ef88fd1eaea070286ed2aba21e0419dcfb6d5c5d9f02a72',
+          transactionIndex: '0x46',
+        },
+        rawContract: {
+          address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+          decimals: 6,
+          rawValue: '0x0000000000000000000000000000000000000000000000000000000011783b21',
+        },
+        toAddress: '0xbe3f4b43db5eb49c1f48f53443b9abce45da3b79',
+        typeTraceAddress: null,
+        value: 293.092129,
+      },
+      {
+        asset: 'USDC',
+        blockNum: '0xdf34a3',
+        category: 'token',
+        erc1155Metadata: null,
+        erc721TokenId: null,
+        fromAddress: '0x71660c4005ba85c37ccec55d0c4493e66fe775d3',
+        hash: '0xc84eeeb72d2b23161fd93b088f304902cbd8b4510f1455a65fdac160e37b3173',
+        log: {
+          address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+          blockHash: '0xa99ec54413bd3db3f9bdb0c1ad3ab1400ee0ecefb47803e17f9d33bc4d0a1e91',
+          blockNumber: '0xdf34a3',
+          data: '0x000000000000000000000000000000000000000000000000000000008f0d1800',
+          logIndex: '0x74',
+          removed: false,
+          topics: [
+            '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+            '0x00000000000000000000000071660c4005ba85c37ccec55d0c4493e66fe775d3',
+            '0x0000000000000000000000007853b3736edba9d7ce681f2a90264307694f97f2',
+          ],
+          transactionHash: '0xc84eeeb72d2b23161fd93b088f304902cbd8b4510f1455a65fdac160e37b3173',
+          transactionIndex: '0x48',
+        },
+        rawContract: {
+          address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+          decimals: 6,
+          rawValue: '0x000000000000000000000000000000000000000000000000000000008f0d1800',
+        },
+        toAddress: '0x7853b3736edba9d7ce681f2a90264307694f97f2',
+        typeTraceAddress: null,
+        value: 2400,
+      },
+      {
+        asset: 'ETH',
+        blockNum: '0xdf34a4',
+        category: 'external',
+        erc1155Metadata: null,
+        erc721TokenId: null,
+        fromAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        hash: '0x9f9e1aa8320c3ecddbe1ee790c91edc1f0e58dea0b35af6dbd8bf0cb3c6d4b11',
+        log: {
+          address: '0x0000000000000000000000000000000000000000',
+          blockHash: '0xe0f1f2f3f4f5060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
+          blockNumber: '0xdf34a4',
+          data: '0x',
+          logIndex: '0x02',
+          removed: false,
+          topics: [
+            '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+            '0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            '0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+          ],
+          transactionHash: '0x9f9e1aa8320c3ecddbe1ee790c91edc1f0e58dea0b35af6dbd8bf0cb3c6d4b11',
+          transactionIndex: '0x07',
+        },
+        rawContract: {
+          address: '0x0000000000000000000000000000000000000000',
+          decimals: 18,
+          rawValue: '0x0000000000000000000000000000000000000000000000000ad78ebc5ac62000',
+        },
+        toAddress: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        typeTraceAddress: null,
+        value: 4.5,
+      },
+    ],
+  },
+};
+export const addressActivityWebhookMocks: AddressActivityWebhook[] = [
+  mockAddressActivityEvent,
+];
