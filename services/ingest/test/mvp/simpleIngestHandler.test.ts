@@ -6,8 +6,8 @@ import {
   roleShuffleActivity,
   singleTxActivity,
   stableBatchActivity,
-} from '../mock_events/wrappedMockEvent';
-import { ASSETS, TRACKED_WALLET } from '../types/alchemyWebhookTypes';
+} from '../../mock_events/wrappedMockEvent';
+import { ASSETS, TRACKED_WALLET } from '../../types/alchemyWebhookTypes';
 
 const cloneEvent = (event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 =>
   JSON.parse(JSON.stringify(event));
@@ -53,7 +53,7 @@ function expectError(res: unknown, expectedBody: string | RegExp) {
 }
 
 describe('simple ingest handler runner converted to test', () => {
-  let handlerModule: typeof import('../src/simpleIngestHandler');
+  let handlerModule: typeof import('../../src/mvp/simpleIngestHandler');
   let mockSend: jest.Mock;
   let insertedItems: Array<Record<string, unknown>>;
   let bucketUpdates: Array<Record<string, unknown>>;
@@ -64,7 +64,7 @@ describe('simple ingest handler runner converted to test', () => {
     process.env.TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE ?? 'test_transactions';
     process.env.WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? 'test_buckets';
 
-    handlerModule = await import('../src/simpleIngestHandler');
+    handlerModule = await import('../../src/mvp/simpleIngestHandler');
   });
 
   beforeEach(() => {

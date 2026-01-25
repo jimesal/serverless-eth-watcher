@@ -1,5 +1,5 @@
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
-import { mixedAssetsActivity } from '../mock_events/wrappedMockEvent';
+import { mixedAssetsActivity } from '../../mock_events/wrappedMockEvent';
 
 describe('minimal handler runner converted to test', () => {
   let mockEvent: APIGatewayProxyEventV2;
@@ -12,7 +12,7 @@ describe('minimal handler runner converted to test', () => {
     process.env.WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? 'test_buckets';
 
     // Import the source module (not compiled artifact) so ts-jest can map sourcemaps
-    handlerMod = await import('../src/minimalIngestHandler');
+    handlerMod = await import('../../src/mvp/minimalIngestHandler');
   });
 
   test('logs received Alchemy payload and returns 200', async () => {

@@ -9,7 +9,7 @@ import {
   AddressActivityEntry,
   AddressActivityWebhook,
   ASSETS,
-} from "../types/alchemyWebhookTypes";
+} from "../../types/alchemyWebhookTypes";
 
 let ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
