@@ -12,6 +12,11 @@ import {
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import {
+  AddressActivityEntry,
+  AddressActivityWebhook,
+  ASSETS,
+} from "../types/alchemyWebhookTypes";
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -29,30 +34,14 @@ const BUCKET_SIZE_SECONDS = envInt("BUCKET_SIZE_SECONDS", 60);
 
 type Direction = "from" | "to";
 
-type AlchemyActivity = {
-  hash?: string;
-  fromAddress?: string;
-  toAddress?: string;
-  asset?: string;
-  value?: number;
-  rawContract?: { rawValue?: string; decimals?: number };
-};
-
-type WebhookEvent = {
-  id?: string;
-  type?: string;
-  event?: {
-    network?: string;
-    activity?: Array<AlchemyActivity>;
-  };
-};
-
 type ParsedActivity = {
   txHash: string;
   from: string;
   to: string;
   amountEth: number;
 };
+
+type IncomingBody = AddressActivityWebhook;
 
 type ThresholdMessage = {
   txHash: string;
@@ -68,17 +57,19 @@ type ThresholdMessage = {
 export const handler = async (
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyResultV2> => {
-  let body: unknown;
+  let parsedBody: unknown;
   try {
-    body = event.body ? JSON.parse(event.body) : {};
+    parsedBody = event.body ? JSON.parse(event.body) : {};
   } catch (e) {
     return resp(400, `invalid json: ${(e as Error).message}`);
   }
 
-  const parsed = parseWebhook(body);
-  if (!parsed.ok) return resp(400, parsed.error);
+  if (!isAddressActivityWebhookPayload(parsedBody)) {
+    return resp(400, "payload does not match AddressActivityWebhook");
+  }
 
-  const { activities, raw } = parsed.data;
+  const raw = parsedBody;
+  const activities = extractEthActivities(raw);
   if (activities.length === 0) return resp(200, "ignored non-ETH asset");
 
   const now = Math.floor(Date.now() / 1000);
@@ -162,42 +153,15 @@ export const handler = async (
 
 /* ---------------- Parsing ---------------- */
 
-function parseWebhook(input: unknown):
-  | { ok: true; data: { raw: WebhookEvent; activities: ParsedActivity[] } }
-  | { ok: false; error: string } {
-  if (!input || typeof input !== "object") return { ok: false, error: "body must be an object" };
-
-  const raw = input as WebhookEvent;
-  const activity = raw.event?.activity;
-  if (!Array.isArray(activity)) return { ok: false, error: "event.activity must be an array" };
-
-  const parsed: ParsedActivity[] = [];
-  for (const act of activity) {
-    if (!act || typeof act !== "object") continue;
-    if (act.asset && act.asset !== "ETH") continue;
-
-    const txHash = normAddr(act.hash, false);
-    const from = normAddr(act.fromAddress, true);
-    const to = normAddr(act.toAddress, true);
-    const value = typeof act.value === "number" ? act.value : Number.NaN;
-
-    if (!txHash) return { ok: false, error: "missing activity.hash" };
-    if (!from) return { ok: false, error: "missing activity.fromAddress" };
-    if (!to) return { ok: false, error: "missing activity.toAddress" };
-    if (!Number.isFinite(value)) return { ok: false, error: "missing activity.value" };
-
-    parsed.push({ txHash, from, to, amountEth: value });
-  }
-
-  return { ok: true, data: { raw, activities: parsed } };
-}
-
-function normAddr(v: unknown, isAddr: boolean): string {
-  if (typeof v !== "string") return "";
-  const s = v.trim().toLowerCase();
-  if (!s) return "";
-  if (isAddr && !s.startsWith("0x")) return "";
-  return s;
+function extractEthActivities(input: IncomingBody): ParsedActivity[] {
+  return input.event.activity
+    .filter((activity) => activity.asset === ASSETS.ETH)
+    .map((activity) => ({
+      txHash: activity.hash,
+      from: activity.fromAddress,
+      to: activity.toAddress,
+      amountEth: activity.value,
+    }));
 }
 
 /* ---------------- DynamoDB: Transactions (idempotency) ---------------- */
@@ -208,7 +172,7 @@ async function putTransactionIfNew(args: {
   wallet: string;
   amountEth: number;
   ts: number;
-  raw: WebhookEvent;
+  raw: IncomingBody;
 }): Promise<boolean /* alreadyProcessed */> {
   const pk = `tx#${args.txHash}#${args.direction}`;
 
@@ -370,4 +334,38 @@ function envInt(k: string, def: number): number {
   const v = Number(raw);
   if (!Number.isInteger(v)) throw new Error(`Invalid int env ${k}`);
   return v;
+}
+
+function isAddressActivityWebhookPayload(value: unknown): value is AddressActivityWebhook {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as AddressActivityWebhook;
+
+  if (
+    typeof payload.webhookId !== "string" ||
+    typeof payload.id !== "string" ||
+    typeof payload.createdAt !== "string" ||
+    payload.type !== "ADDRESS_ACTIVITY"
+  ) {
+    return false;
+  }
+
+  if (!payload.event || !Array.isArray(payload.event.activity)) {
+    return false;
+  }
+
+  return payload.event.activity.every(isAddressActivityEntryPayload);
+}
+
+function isAddressActivityEntryPayload(value: unknown): value is AddressActivityEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as AddressActivityEntry;
+  const assetValues = Object.values(ASSETS);
+
+  return (
+    typeof entry.hash === "string" &&
+    typeof entry.fromAddress === "string" &&
+    typeof entry.toAddress === "string" &&
+    typeof entry.value === "number" &&
+    assetValues.includes(entry.asset as (typeof ASSETS)[keyof typeof ASSETS])
+  );
 }

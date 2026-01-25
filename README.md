@@ -3,9 +3,10 @@
 A minimal, cost-efficient serverless Ethereum transaction watcher.
 It detects high-volume activity for configured wallets and sends alerts when thresholds are exceeded.
 
-This project is a serverless rework of the original eth-watcher, designed as a portfolio-ready AWS architecture with clear tradeoffs and upgrade paths.
+This project showcases a portfolio-ready AWS architecture with clear tradeoffs and upgrade paths.
 
 **Goals**
+- Track a wallet’s ETH flow in both directions—what it sends **and** what it receives—without caring who the counterparty is
 - Replace a local WebSocket watcher with a serverless ingestion pipeline
 - Minimize cost using managed, on-demand AWS services
 - Keep the architecture simple, explainable, and production-relevant
@@ -63,6 +64,12 @@ It is ideal for low to moderate traffic, demos, and early production workloads.
 **Data handling assumptions**
 - Only ETH transfers are persisted. Non-ETH assets (USDC, ERC20s, NFTs, etc.) are explicitly ignored so that DynamoDB stores exclusively ETH activity.
 - Payload normalization (addresses, values, decimals, hashes) is assumed to be handled by the Alchemy webhook service. Additional normalization or schema validation is out of scope for this project to keep the ingestion path lean.
+- The tracked wallet is the only entity of interest. We do not attempt to annotate or classify counterparties; volume is aggregated per wallet/direction pair so we can answer “how much ETH did this address move (in or out) over the rolling window?”
+
+**Alchemy webhook contract**
+- The payload shape follows Alchemy's Address Activity webhook spec; see their docs for the latest schema: https://www.alchemy.com/docs/reference/address-activity-webhook. The generated TypeScript interfaces live in [services/ingest/types/alchemyWebhookTypes.ts](services/ingest/types/alchemyWebhookTypes.ts) and are consumed by the ingest Lambda.
+- The main handler validates incoming events with lightweight runtime guards (see [services/ingest/src/handler.ts](services/ingest/src/handler.ts)) before touching DynamoDB/SNS. This keeps ingestion resilient against non-Alchemy callers or malformed replay payloads without adding another hop in front of API Gateway.
+- Each tracked wallet can appear as the origin (`from`) or destination (`to`) of a transaction. The handler therefore records and aggregates both directions per hash so ETH volume limits remain accurate regardless of who initiates the transfer.
 
 **Alternative architecture (more expensive, more robust)**
 
@@ -129,13 +136,10 @@ This project intentionally does NOT aim to:
 - Handle very high throughput or enterprise-scale workloads
 - Implement complex analytics or historical querying
 
+> **Note:** The ingest Lambda evaluates each tracked wallet for both outgoing and incoming ETH, regardless of counterparty, so alerting is symmetric by design.
+
 Those concerns are discussed in the alternative architecture section but are out of scope for the default implementation.
 
 **Relationship to the original project**
-This project is a rework and adaptation of the original repository: https://github.com/yermakovsa/eth-watcher :
-- Transaction parsing and value handling
-- Aggregation logic concepts
-- Configuration structure
-
-The main change is architectural: moving from a local, long-running WebSocket process to a serverless, event-driven AWS design.
+Inspired by (but not dependent on) the original `eth-watcher` repo: https://github.com/yermakovsa/eth-watcher . We borrowed a few ideas—basic parsing, aggregation concepts, some config naming—but rebuilt the solution for a different problem: tracking a single wallet’s ETH flow in both directions on a fully serverless stack. This codebase is intentionally standalone, uses typed Alchemy webhooks instead of WebSockets, and makes different architectural trade-offs (API Gateway + Lambda + DynamoDB + SNS versus a persistent worker).
   ````
