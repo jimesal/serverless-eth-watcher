@@ -1,127 +1,202 @@
-export interface AddressActivityWebhook {
-  webhookId: string;
-  id: string;
-  createdAt: string;
-  type: 'ADDRESS_ACTIVITY';
-  event: AddressActivityEvent;
-}
+import {
+  AddressActivityEntry,
+  AddressActivityWebhook,
+  ASSETS,
+  TRACKED_WALLET,
+  WALLET_ADDRESSES,
+  WalletAddress,
+  AssetSymbol,
+} from '../types/alchemy_webhook_types';
 
-export interface ActivityLog {
-  address: string;
-  blockHash: string;
-  blockNumber: string;
-  data: string;
-  logIndex: string;
-  removed: boolean;
-  topics: string[];
-  transactionHash: string;
-  transactionIndex: string;
-}
+const BASE_BLOCK = '0xabc123';
+const BASE_HASH = '0xblockhash';
+const BASE_DATA = '0x01';
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const USDC_CONTRACT = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+const BASE_CREATED_AT = '2024-09-25T13:52:47.561Z';
 
-export interface RawContract {
-  address: string;
-  decimals: number;
-  rawValue: string;
-}
-
-export interface AddressActivityEntry {
-  asset: string;
-  blockNum: string;
-  category: string;
-  erc1155Metadata: unknown;
-  erc721TokenId: string | null;
-  fromAddress: string;
+type ActivitySeed = {
+  asset: AssetSymbol;
   hash: string;
-  log: ActivityLog;
-  rawContract: RawContract;
-  toAddress: string;
-  typeTraceAddress: string | null;
   value: number;
+  from: WalletAddress;
+  to: WalletAddress;
+  logIndex: number;
+};
+
+function toHexIndex(index: number): string {
+  return `0x${index.toString(16)}`;
 }
 
-export interface AddressActivityEvent {
-  network: string;
-  activity: AddressActivityEntry[];
+function createActivityEntry(seed: ActivitySeed): AddressActivityEntry {
+  const isEth = seed.asset === ASSETS.ETH;
+  const contractAddress = isEth ? ZERO_ADDRESS : USDC_CONTRACT;
+  const decimals = isEth ? 18 : 6;
+  const hexIndex = toHexIndex(seed.logIndex);
+
+  return {
+    asset: seed.asset,
+    blockNum: BASE_BLOCK,
+    category: isEth ? 'external' : 'token',
+    erc1155Metadata: null,
+    erc721TokenId: null,
+    fromAddress: seed.from,
+    hash: seed.hash,
+    log: {
+      address: contractAddress,
+      blockHash: BASE_HASH,
+      blockNumber: BASE_BLOCK,
+      data: BASE_DATA,
+      logIndex: hexIndex,
+      removed: false,
+      topics: ['0xtransfer', seed.from, seed.to],
+      transactionHash: seed.hash,
+      transactionIndex: hexIndex,
+    },
+    rawContract: {
+      address: contractAddress,
+      decimals,
+      rawValue: BASE_DATA,
+    },
+    toAddress: seed.to,
+    typeTraceAddress: null,
+    value: seed.value,
+  };
 }
 
-export const canonicalNonEthActivityEntry: AddressActivityEntry = {
-  asset: 'USDC',
-  blockNum: '0xdf34a3',
-  category: 'token',
-  erc1155Metadata: null,
-  erc721TokenId: null,
-  fromAddress: '0x503828976d22510aad0201ac7ec88293211d23da',
-  hash: '0x7a4a39da2a3fa1fc2ef88fd1eaea070286ed2aba21e0419dcfb6d5c5d9f02a72',
-  log: {
-    address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-    blockHash: '0xa99ec54413bd3db3f9bdb0c1ad3ab1400ee0ecefb47803e17f9d33bc4d0a1e91',
-    blockNumber: '0xdf34a3',
-    data: '0x0000000000000000000000000000000000000000000000000000000011783b21',
-    logIndex: '0x6e',
-    removed: false,
-    topics: [
-      '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
-      '0x000000000000000000000000503828976d22510aad0201ac7ec88293211d23da',
-      '0x000000000000000000000000be3f4b43db5eb49c1f48f53443b9abce45da3b79',
-    ],
-    transactionHash: '0x7a4a39da2a3fa1fc2ef88fd1eaea070286ed2aba21e0419dcfb6d5c5d9f02a72',
-    transactionIndex: '0x46',
-  },
-  rawContract: {
-    address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-    decimals: 6,
-    rawValue: '0x0000000000000000000000000000000000000000000000000000000011783b21',
-  },
-  toAddress: '0xbe3f4b43db5eb49c1f48f53443b9abce45da3b79',
-  typeTraceAddress: null,
-  value: 293.092129,
-};
+function buildWebhookEvent(label: string, activity: AddressActivityEntry[]): AddressActivityWebhook {
+  return {
+    webhookId: `wh_${label}`,
+    id: `whevt_${label}`,
+    createdAt: BASE_CREATED_AT,
+    type: 'ADDRESS_ACTIVITY',
+    event: {
+      network: 'ETH_MAINNET',
+      activity,
+    },
+  };
+}
 
-export const canonicalEthActivityEntry: AddressActivityEntry = {
-  asset: 'ETH',
-  blockNum: '0xdf34a4',
-  category: 'external',
-  erc1155Metadata: null,
-  erc721TokenId: null,
-  fromAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  hash: '0x9f9e1aa8320c3ecddbe1ee790c91edc1f0e58dea0b35af6dbd8bf0cb3c6d4b11',
-  log: {
-    address: '0x0000000000000000000000000000000000000000',
-    blockHash: '0xe0f1f2f3f4f5060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f',
-    blockNumber: '0xdf34a4',
-    data: '0x',
-    logIndex: '0x02',
-    removed: false,
-    topics: [
-      '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
-      '0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      '0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-    ],
-    transactionHash: '0x9f9e1aa8320c3ecddbe1ee790c91edc1f0e58dea0b35af6dbd8bf0cb3c6d4b11',
-    transactionIndex: '0x07',
-  },
-  rawContract: {
-    address: '0x0000000000000000000000000000000000000000',
-    decimals: 18,
-    rawValue: '0x0000000000000000000000000000000000000000000000000ad78ebc5ac62000',
-  },
-  toAddress: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-  typeTraceAddress: null,
-  value: 4.5,
-};
+const { counterpartyA, counterpartyB } = WALLET_ADDRESSES;
 
-export const canonicalActivityEvent: AddressActivityEvent = {
-  network: 'ETH_MAINNET',
-  activity: [canonicalNonEthActivityEntry, canonicalEthActivityEntry],
-};
+const singleTxActivity = [
+  createActivityEntry({
+    asset: ASSETS.USDC,
+    hash: '0xsingle-usdc',
+    value: 25.5,
+    from: TRACKED_WALLET,
+    to: counterpartyA,
+    logIndex: 1,
+  }),
+];
 
-export const mockAddressActivityEvent: AddressActivityWebhook = {
-  webhookId: 'wh_ac5sekedy2t7n2gs',
-  id: 'whevt_pz2qu8k04anfjknt',
-  createdAt: '2024-09-25T13:52:47.561987389Z',
-  type: 'ADDRESS_ACTIVITY',
-  event: canonicalActivityEvent,
-};
+const stableBatchActivity = [
+  createActivityEntry({
+    asset: ASSETS.USDC,
+    hash: '0xstable-1',
+    value: 35.75,
+    from: TRACKED_WALLET,
+    to: counterpartyA,
+    logIndex: 2,
+  }),
+  createActivityEntry({
+    asset: ASSETS.USDC,
+    hash: '0xstable-2',
+    value: 41.1,
+    from: counterpartyA,
+    to: TRACKED_WALLET,
+    logIndex: 3,
+  }),
+  createActivityEntry({
+    asset: ASSETS.DAI,
+    hash: '0xstable-3',
+    value: 17.45,
+    from: TRACKED_WALLET,
+    to: counterpartyB,
+    logIndex: 4,
+  }),
+];
+
+const mixedAssetActivity = [
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xmix-eth-1',
+    value: 1.2,
+    from: TRACKED_WALLET,
+    to: counterpartyB,
+    logIndex: 5,
+  }),
+  createActivityEntry({
+    asset: ASSETS.USDC,
+    hash: '0xmix-usdc-1',
+    value: 67.4,
+    from: counterpartyB,
+    to: TRACKED_WALLET,
+    logIndex: 6,
+  }),
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xmix-eth-2',
+    value: 0.85,
+    from: counterpartyA,
+    to: TRACKED_WALLET,
+    logIndex: 7,
+  }),
+  createActivityEntry({
+    asset: ASSETS.USDC,
+    hash: '0xmix-usdc-2',
+    value: 90.6,
+    from: TRACKED_WALLET,
+    to: counterpartyA,
+    logIndex: 8,
+  }),
+];
+
+const directionShuffleActivity = [
+  createActivityEntry({
+    asset: ASSETS.USDC,
+    hash: '0xrole-1',
+    value: 12.3,
+    from: TRACKED_WALLET,
+    to: counterpartyB,
+    logIndex: 9,
+  }),
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xrole-2',
+    value: 2.05,
+    from: counterpartyA,
+    to: TRACKED_WALLET,
+    logIndex: 10,
+  }),
+  createActivityEntry({
+    asset: ASSETS.USDC,
+    hash: '0xrole-3',
+    value: 77.7,
+    from: counterpartyB,
+    to: TRACKED_WALLET,
+    logIndex: 11,
+  }),
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xrole-4',
+    value: 0.6,
+    from: TRACKED_WALLET,
+    to: counterpartyA,
+    logIndex: 12,
+  }),
+];
+
+export const singleTxEvent = buildWebhookEvent('single_tx', singleTxActivity);
+export const stableBatchEvent = buildWebhookEvent('stable_batch', stableBatchActivity);
+export const mixedAssetEvent = buildWebhookEvent('mixed_asset', mixedAssetActivity);
+export const roleShuffleEvent = buildWebhookEvent('role_shuffle', directionShuffleActivity);
+
+export const mockAddressActivityEvent = mixedAssetEvent;
+
 export const addressActivityWebhookMocks: AddressActivityWebhook[] = [
-  mockAddressActivityEvent,
+  singleTxEvent,
+  stableBatchEvent,
+  mixedAssetEvent,
+  roleShuffleEvent,
 ];

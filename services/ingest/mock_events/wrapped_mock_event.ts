@@ -1,6 +1,13 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import type { AddressActivityWebhook } from "./alchemy_mock_events";
-import { mockAddressActivityEvent } from "./alchemy_mock_events";
+import type { AddressActivityWebhook } from "../types/alchemy_webhook_types";
+import { ASSETS } from "../types/alchemy_webhook_types";
+import {
+  mixedAssetEvent,
+  mockAddressActivityEvent,
+  roleShuffleEvent,
+  singleTxEvent,
+  stableBatchEvent,
+} from "./alchemy_mock_events";
 
 const baseEnvelope: APIGatewayProxyEventV2 = {
   version: "2.0",
@@ -67,13 +74,25 @@ export function buildWrappedEvent({
   };
 }
 
-export const mixedAssetsActivity = buildWrappedEvent();
+export const singleTxActivity = buildWrappedEvent({ body: singleTxEvent });
+export const stableBatchActivity = buildWrappedEvent({ body: stableBatchEvent });
+export const mixedAssetsActivity = buildWrappedEvent({ body: mixedAssetEvent });
+export const roleShuffleActivity = buildWrappedEvent({ body: roleShuffleEvent });
 
 const noEthBody = cloneAddressActivityPayload();
 noEthBody.event.activity = noEthBody.event.activity.map((activity) =>
-  activity.asset === "ETH"
-    ? { ...activity, asset: "USD" }
+  activity.asset === ASSETS.ETH
+    ? { ...activity, asset: ASSETS.USDC }
     : activity,
 );
 
 export const noETHAssetActivity = buildWrappedEvent({ body: noEthBody });
+
+const duplicatedTransactionsBody = cloneAddressActivityPayload();
+duplicatedTransactionsBody.event.activity = duplicatedTransactionsBody.event.activity.flatMap(
+  (activity) => [activity, deepClone(activity)],
+);
+
+export const duplicatedTransactionsActivity = buildWrappedEvent({
+  body: duplicatedTransactionsBody,
+});
