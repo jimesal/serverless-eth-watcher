@@ -18,10 +18,22 @@ import {
   ASSETS,
 } from "../types/alchemyWebhookTypes";
 
-const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
+let ddb: Pick<DynamoDBDocumentClient, "send"> = DynamoDBDocumentClient.from(
+  new DynamoDBClient({}),
+  {
   marshallOptions: { removeUndefinedValues: true },
-});
-const sns = new SNSClient({});
+  }
+);
+let sns: Pick<SNSClient, "send"> = new SNSClient({});
+
+// Exported for tests to inject mock clients
+export function setDdb(client: Pick<DynamoDBDocumentClient, "send">) {
+  ddb = client;
+}
+
+export function setSns(client: Pick<SNSClient, "send">) {
+  sns = client;
+}
 
 const TRANSACTIONS_TABLE = mustEnv("TRANSACTIONS_TABLE");
 const WALLET_BUCKETS_TABLE = mustEnv("WALLET_BUCKETS_TABLE");

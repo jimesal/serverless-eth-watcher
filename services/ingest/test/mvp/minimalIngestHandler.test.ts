@@ -1,7 +1,7 @@
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { mixedAssetsActivity } from '../../mock_events/wrappedMockEvent';
 
-describe('minimal handler runner converted to test', () => {
+describe('minimal handler tests', () => {
   let mockEvent: APIGatewayProxyEventV2;
   let handlerMod: any;
 

@@ -52,7 +52,7 @@ function expectError(res: unknown, expectedBody: string | RegExp) {
   }
 }
 
-describe('simple ingest handler runner converted to test', () => {
+describe('simple ingest handler tests', () => {
   let handlerModule: typeof import('../../src/mvp/simpleIngestHandler');
   let mockSend: jest.Mock;
   let insertedItems: Array<Record<string, unknown>>;
