@@ -6,8 +6,8 @@ import {
   roleShuffleActivity,
   singleTxActivity,
   stableBatchActivity,
-} from '../mock_events/wrapped_mock_event';
-import { ASSETS, TRACKED_WALLET } from '../types/alchemy_webhook_types';
+} from '../mock_events/wrappedMockEvent';
+import { ASSETS, TRACKED_WALLET } from '../types/alchemyWebhookTypes';
 
 const cloneEvent = (event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 =>
   JSON.parse(JSON.stringify(event));

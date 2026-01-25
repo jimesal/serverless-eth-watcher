@@ -1,13 +1,13 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
-import type { AddressActivityWebhook } from "../types/alchemy_webhook_types";
-import { ASSETS } from "../types/alchemy_webhook_types";
+import type { AddressActivityWebhook } from "../types/alchemyWebhookTypes";
+import { ASSETS } from "../types/alchemyWebhookTypes";
 import {
   mixedAssetEvent,
   mockAddressActivityEvent,
   roleShuffleEvent,
   singleTxEvent,
   stableBatchEvent,
-} from "./alchemy_mock_events";
+} from "./alchemyMockEvents";
 
 const baseEnvelope: APIGatewayProxyEventV2 = {
   version: "2.0",

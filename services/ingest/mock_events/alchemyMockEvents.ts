@@ -6,7 +6,7 @@ import {
   WALLET_ADDRESSES,
   WalletAddress,
   AssetSymbol,
-} from '../types/alchemy_webhook_types';
+} from '../types/alchemyWebhookTypes';
 
 const BASE_BLOCK = '0xabc123';
 const BASE_HASH = '0xblockhash';
