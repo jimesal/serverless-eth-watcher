@@ -38,6 +38,20 @@ function expectResponse(res: unknown, expectedBody: string) {
   expect(res.body).toBe(expectedBody);
 }
 
+function expectError(res: unknown, expectedBody: string | RegExp) {
+  expect(res).toBeDefined();
+  if (typeof res === 'string') {
+    throw new Error(`expected structured response, received string: ${res}`);
+  }
+
+  expect(res.statusCode).toBe(400);
+  if (expectedBody instanceof RegExp) {
+    expect(res.body).toMatch(expectedBody);
+  } else {
+    expect(res.body).toBe(expectedBody);
+  }
+}
+
 describe('simple ingest handler runner converted to test', () => {
   let handlerModule: typeof import('../src/simpleIngestHandler');
   let mockSend: jest.Mock;
@@ -83,6 +97,33 @@ describe('simple ingest handler runner converted to test', () => {
       return {};
     });
     handlerModule.setDdb({ send: mockSend });
+  });
+
+  test('returns 400 when the webhook body contains invalid JSON', async () => {
+    const brokenEvent = cloneEvent(singleTxActivity);
+    brokenEvent.body = '{';
+
+    const res = await handlerModule.handler(brokenEvent);
+
+    expectError(res, /^invalid json:/);
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(insertedItems).toHaveLength(0);
+    expect(bucketUpdates).toHaveLength(0);
+  });
+
+  test('returns 400 when payload is missing required fields', async () => {
+    const malformedEvent = cloneEvent(singleTxActivity);
+    malformedEvent.body = JSON.stringify({
+      type: 'ADDRESS_ACTIVITY',
+      event: { activity: [] },
+    });
+
+    const res = await handlerModule.handler(malformedEvent);
+
+    expectError(res, 'payload does not match AddressActivityWebhook');
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(insertedItems).toHaveLength(0);
+    expect(bucketUpdates).toHaveLength(0);
   });
 
   test('handles single non-ETH transaction payloads', async () => {
