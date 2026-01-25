@@ -1,0 +1,16 @@
+{
+  "name": "notifier-lambda",
+  "private": true,
+  "type": "module",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.0",
+    "@types/node": "^25.0.9",
+    "esbuild": "^0.27.2",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "esbuild src/handler.ts --bundle --platform=node --outfile=dist/handler.js --sourcemap",
+    "test": "echo \"no tests yet\""
+  }
+}
