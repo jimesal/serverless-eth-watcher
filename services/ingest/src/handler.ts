@@ -12,11 +12,16 @@ import {
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import { AddressActivityEntry, AddressActivityWebhook, ASSETS } from "../types/alchemyWebhookTypes";
 import {
-  AddressActivityEntry,
-  AddressActivityWebhook,
-  ASSETS,
-} from "../types/alchemyWebhookTypes";
+  BUCKET_SIZE_SECONDS,
+  COOLDOWN_SECONDS,
+  SNS_TOPIC_ARN,
+  THRESHOLD_ETH,
+  TRANSACTIONS_TABLE,
+  WALLET_BUCKETS_TABLE,
+  WINDOW_SECONDS,
+} from "./../env";
 
 let ddb: Pick<DynamoDBDocumentClient, "send"> = DynamoDBDocumentClient.from(
   new DynamoDBClient({}),
@@ -34,15 +39,6 @@ export function setDdb(client: Pick<DynamoDBDocumentClient, "send">) {
 export function setSns(client: Pick<SNSClient, "send">) {
   sns = client;
 }
-
-const TRANSACTIONS_TABLE = mustEnv("TRANSACTIONS_TABLE");
-const WALLET_BUCKETS_TABLE = mustEnv("WALLET_BUCKETS_TABLE");
-const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN ?? "";
-
-const THRESHOLD_ETH = mustEnvNumber("THRESHOLD_ETH"); // e.g. 5
-const WINDOW_SECONDS = mustEnvInt("WINDOW_SECONDS"); // e.g. 300
-const COOLDOWN_SECONDS = mustEnvInt("COOLDOWN_SECONDS"); // e.g. 30
-const BUCKET_SIZE_SECONDS = envInt("BUCKET_SIZE_SECONDS", 60);
 
 type Direction = "from" | "to";
 
@@ -393,28 +389,6 @@ function resp(code: number, body: string): APIGatewayProxyResultV2 {
   };
 }
 
-function mustEnv(k: string): string {
-  const v = (process.env[k] ?? "").trim();
-  if (!v) throw new Error(`Missing env var: ${k}`);
-  return v;
-}
-function mustEnvInt(k: string): number {
-  const v = Number((process.env[k] ?? "").trim());
-  if (!Number.isInteger(v)) throw new Error(`Invalid int env ${k}`);
-  return v;
-}
-function mustEnvNumber(k: string): number {
-  const v = Number((process.env[k] ?? "").trim());
-  if (!Number.isFinite(v)) throw new Error(`Invalid number env ${k}`);
-  return v;
-}
-function envInt(k: string, def: number): number {
-  const raw = (process.env[k] ?? "").trim();
-  if (!raw) return def;
-  const v = Number(raw);
-  if (!Number.isInteger(v)) throw new Error(`Invalid int env ${k}`);
-  return v;
-}
 
 function isAddressActivityWebhookPayload(value: unknown): value is AddressActivityWebhook {
   if (!value || typeof value !== "object") return false;

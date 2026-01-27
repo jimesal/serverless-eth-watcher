@@ -1,4 +1,5 @@
 import type { SNSEvent } from "aws-lambda";
+import { APP_NAME, SLACK_WEBHOOK_URL } from "./../env";
 
 /**
  * Payload published by the ingest Lambda when a wallet breaches the threshold.
@@ -13,9 +14,6 @@ type ThresholdMessage = {
   source: "alchemy-webhook";
   requestId?: string;
 };
-
-const SLACK_WEBHOOK_URL = mustEnv("SLACK_WEBHOOK_URL");
-const APP_NAME = process.env.APP_NAME ?? "serverless-eth-watcher";
 
 export const handler = async (event: SNSEvent): Promise<void> => {
   if (!event.Records || event.Records.length === 0) {
@@ -100,12 +98,4 @@ function isThresholdMessage(value: unknown): value is ThresholdMessage {
     typeof v.timestamp === "number" &&
     v.source === "alchemy-webhook"
   );
-}
-
-function mustEnv(key: string): string {
-  const value = process.env[key]?.trim();
-  if (!value) {
-    throw new Error(`Missing env var: ${key}`);
-  }
-  return value;
 }
