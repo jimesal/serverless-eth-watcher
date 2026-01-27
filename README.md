@@ -1,155 +1,112 @@
-# Serverless ETH Watcher
+﻿# Serverless ETH Watcher
 
-A minimal, cost-efficient serverless Ethereum transaction watcher.
-It detects high-volume activity for configured wallets and sends alerts when thresholds are exceeded.
+Portfolio-scale serverless pipeline that ingests Alchemy webhook events, tracks ETH flow for a target wallet, and emits Slack-ready alerts when rolling thresholds are exceeded. It started as a fork-of-the-ideas from the original [eth-watcher](https://github.com/yermakovsa/eth-watcher) WebSocket runner, but I re-scoped it into a fully serverless design so I could showcase cloud-native tradeoffs. I treat it like a production system: typed contracts, IaC, isolated Lambdas, and deterministic tests per service.
 
-This project showcases a portfolio-ready AWS architecture with clear tradeoffs and upgrade paths.
+## System Goals
+- Mirror real-world on-call scenarios: detect anomalous ETH movement for a wallet across `from` and `to` directions.
+- Replace brittle local scripts with scalable managed primitives (API Gateway → Lambda → DynamoDB → SNS → Lambda).
+- Keep operating cost near zero by leveraging On-Demand billing, zero-idle compute, and IaC reproducibility.
+- Provide clear upgrade paths that demonstrate full-stack and cloud-architecture thinking.
 
-**Goals**
-- Track a wallet’s ETH flow in both directions—what it sends **and** what it receives—without caring who the counterparty is
-- Replace a local WebSocket watcher with a serverless ingestion pipeline
-- Minimize cost using managed, on-demand AWS services
-- Keep the architecture simple, explainable, and production-relevant
-- Provide Infrastructure as Code and demo-ready assets
-
-**Architecture (high level)**
+## Architecture
 
 ```mermaid
 flowchart LR
-  A[Alchemy Webhooks] -->|POST| B["API Gateway (HTTP API)"]
+  A[Alchemy Webhook] --> B[API Gateway HTTP]
   B --> C[Ingest Lambda]
-
-  C --> D[DynamoDB - Transactions]
-  C --> E[DynamoDB - WalletBuckets]
-  C -->|on threshold| F[SNS Topic]
-
+  C --> D[DynamoDB Transactions]
+  C --> E[DynamoDB WalletBuckets]
+  C --> F[SNS Topic]
   F --> G[Notifier Lambda]
-  G --> H[Notification Channels]
-  H --> H1[Telegram]
-  H --> H2[Slack]
-  H --> H3[Email / Webhook]
+  G --> H[Slack Webhook]
+  C --> I[CloudWatch Logs]
+  G --> I
+```
 
-  subgraph Observability
-    I[CloudWatch Logs & Metrics]
-  end
+- **Ingest Lambda (`services/ingest/src/mvp`):** validates Alchemy payloads, deduplicates transactions, writes both `from` and `to` perspectives, and aggregates ETH totals into 60-second buckets.
+- **DynamoDB tables:** Open-ended on-demand throughput; per-direction PKs keep reads bounded while a sentinel PK manages cooldowns.
+- **SNS topic + Notifier Lambda:** decouples alert publication from delivery; notifier fans out Slack payloads and surfaces HTTP failures for DLQ handling.
+- **Observability:** CloudWatch metrics/logs on both handlers plus explicit structured logs inside mocks to surface replayable payloads.
 
-  C --> I
-  ````
-  
-**Why this architecture**
-This is the cheapest fully managed design:
-- Alchemy Webhooks replace long-lived WebSocket connections
-- API Gateway (HTTP API) is cheaper and lower-latency than REST API
-- Lambda handles ingestion, aggregation, and alerting
-- DynamoDB (On-Demand) stores transactions and time buckets with no capacity planning
-- SNS decouples alert generation from notification delivery
-- CloudWatch provides built-in logs and metrics
+## Runtime Flow
+1. Alchemy posts a signed Address Activity payload.
+2. API Gateway HTTP API forwards the request without transformation.
+3. Ingest Lambda parses, rejects non-ETH assets, upserts transaction and bucket rows via the AWS SDK v3 client abstractions, and publishes threshold breach messages to SNS.
+4. SNS buffers bursts and retries delivery automatically.
+5. Notifier Lambda turns SNS messages into Slack-compatible JSON and calls the configured webhook, failing fast on non-2xx responses.
 
-This setup has:
-- No always-on compute
-- No servers to manage
-- Costs that scale only with usage
+## Data + Assumptions
+- Focused exclusively on ETH transfers; ignoring ERC20/NFT assets keeps writes small and deterministic.
+- Rolling windows are configurable via environment (`THRESHOLD_ETH`, `WINDOW_SECONDS`, `COOLDOWN_SECONDS`, `BUCKET_SIZE_SECONDS`).
+- Wallets are treated symmetrically across `from`/`to`; each hash only counts once because dedupe guards use PK hashes.
+- Schema definitions live under [services/ingest/types/alchemyWebhookTypes.ts](services/ingest/types/alchemyWebhookTypes.ts) and are enforced both at compile-time and via lightweight runtime guards in [services/ingest/src/mvp/simpleIngestHandler.ts](services/ingest/src/mvp/simpleIngestHandler.ts).
 
-It is ideal for low to moderate traffic, demos, and early production workloads.
+## Tests & Quality Gates
+- **Unit suites per Lambda.**
+  - [services/ingest/test/simpleIngestHandler.test.ts](services/ingest/test/simpleIngestHandler.test.ts) and [services/ingest/test/minimalIngestHandler.test.ts](services/ingest/test/minimalIngestHandler.test.ts) run under `npm --prefix services/ingest test`, mocking DynamoDB/SNS primitives while exercising the real handler code.
+  - [services/notifier/test/handler.test.ts](services/notifier/test/handler.test.ts) covers Slack payload generation, malformed SNS inputs, and HTTP failure handling.
+- **Integration harness (opt-in).** [services/integrationTests](services/integrationTests) keeps a pipeline spec that wires both Lambdas end-to-end; add its Jest config to the root when extended coverage is required.
+- Root [jest.config.cjs](jest.config.cjs) fans test runs into each service-specific config so CI can run `npm test` at the repo root.
 
-**How it works (end-to-end)**
+## Repository Structure (MVP)
+- [services/ingest](services/ingest) – Lambda source in `src/mvp`, mock payloads under `mock_events`, Jest unit tests under `test`, bundled output in `dist`.
+- [services/notifier](services/notifier) – Slack notifier Lambda plus focused Jest config and mocks.
+- [services/integrationTests](services/integrationTests) – optional cross-service suites with their own tsconfig/jest config.
+- [infra/terraform](infra/terraform) – API Gateway, Lambda functions, IAM roles, DynamoDB tables, and SNS topic expressed as modules for reproducible deploys.
+- [README.md](README.md) – this document; treat it as living design documentation.
 
-1. Alchemy sends transaction events via webhook
-2. API Gateway receives and forwards the request
-3. Ingest Lambda parses and stores transactions
-4. DynamoDB time buckets track activity per wallet
-5. Threshold breaches publish events to SNS
-6. Notifier Lambda sends alerts to configured channels
+```
+serverless-eth-watcher/
+├─ infra/
+│  └─ terraform/
+├─ services/
+│  ├─ ingest/
+│  │  ├─ mock_events/
+│  │  ├─ src/mvp/
+│  │  └─ test/
+│  ├─ notifier/
+│  │  ├─ src/
+│  │  └─ test/
+│  └─ integrationTests/
+│     ├─ pipeline.integration.test.ts
+│     ├─ ingestNotifier.integration.test.ts
+│     └─ jest.config.cjs
+├─ README.md
+└─ jest.config.cjs
+```
 
-**Throughput & resilience cheat sheet**
-- The Alchemy webhook can burst dozens of POSTs per second; keep the ingest Lambda warm (Provisioned Concurrency) and DynamoDB on On-Demand capacity so the Lambda keeps up. Cold starts and throttled tables are the typical bottlenecks.
-- SNS absorbs spikes between ingest and notifier: as long as the topic accepts the publish, alerts are durably stored. Attach DLQs to both Lambdas to capture failed invocations instead of silently dropping messages.
-- Slack webhooks rate-limit (~1 msg/sec sustained). If you expect more alerts, either batch messages per wallet or add a buffering queue between the notifier and Slack; otherwise the notifier will retry and eventually land in the DLQ.
-- To prevent message loss under throttling:
-  1. Enable retries + DLQs on API Gateway → Lambda (handled by AWS) and on SNS subscriptions.
-  2. Set reasonable reserved/provisioned concurrency on both Lambdas so they scale with demand.
-  3. Monitor CloudWatch metrics (`Throttles`, `ConcurrentExecutions`, `SNS NumberOfNotificationsFailed`, Slack HTTP status codes) and bump limits before saturation.
-- If throttling appears, add Provisioned Concurrency for steady traffic, increase Lambda memory (faster runtime), and consider SQS buffering (between webhook and ingest, or SNS and notifier) for extreme spikes. This isolates each hop so Alchemy’s throughput never forces end-to-end message loss.
+## Delivery & Operations Posture
+- Terraform state captures the whole stack so environments can be recreated in minutes; IAM least-privilege roles keep blast radius low.
+- Cold-start resilience via environment-driven configuration, deterministic mocks, and ability to add Provisioned Concurrency without code changes.
+- Alert pipeline is durable because SNS provides at-least-once delivery and decouples ingestion spikes from Slack rate limits; DLQ hooks are documented in [infra/terraform](infra/terraform).
 
-**Data handling assumptions**
-- Only ETH transfers are persisted. Non-ETH assets (USDC, ERC20s, NFTs, etc.) are explicitly ignored so that DynamoDB stores exclusively ETH activity.
-- Payload normalization (addresses, values, decimals, hashes) is assumed to be handled by the Alchemy webhook service. Additional normalization or schema validation is out of scope for this project to keep the ingestion path lean.
-- The tracked wallet is the only entity of interest. We do not attempt to annotate or classify counterparties; volume is aggregated per wallet/direction pair so we can answer “how much ETH did this address move (in or out) over the rolling window?”
+## Future-ready Extensions
+1. **SQS buffering** between API Gateway and ingest or between SNS and notifier when extreme bursts or Slack rate limits demand smoothing.
+2. **Persistent ingest tier** (Fargate + WebSocket + Kinesis) for institutional throughput; see the earlier alternative diagram for trade-offs.
+3. **Multi-channel notifications** by adding additional subscribers to SNS (Email, PagerDuty, Webhooks) without touching ingest code.
 
-**Alchemy webhook contract**
-- The payload shape follows Alchemy's Address Activity webhook spec; see their docs for the latest schema: https://www.alchemy.com/docs/reference/address-activity-webhook. The generated TypeScript interfaces live in [services/ingest/types/alchemyWebhookTypes.ts](services/ingest/types/alchemyWebhookTypes.ts) and are consumed by the ingest Lambda.
-- The main handler validates incoming events with lightweight runtime guards (see [services/ingest/src/handler.ts](services/ingest/src/handler.ts)) before touching DynamoDB/SNS. This keeps ingestion resilient against non-Alchemy callers or malformed replay payloads without adding another hop in front of API Gateway.
-- Each tracked wallet can appear as the origin (`from`) or destination (`to`) of a transaction. The handler therefore records and aggregates both directions per hash so ETH volume limits remain accurate regardless of who initiates the transfer.
+This codebase demonstrates full-stack ownership: typed handlers, automated tests, deterministic mocks, IaC, and clear operational guardrails—all wrapped in a concise serverless MVP that is cheap to run yet easy to extend.
 
-**Alternative architecture (more expensive, more robust)**
+## Alternative Architecture (Scaling Path)
 
-  ```mermaid
+```mermaid
 flowchart LR
-  subgraph Ingest
-    A[Alchemy WebSocket] -->|ws| B[Fargate Ingestor]
-    B -->|PutEvents| K[Kinesis / SQS]
+  subgraph PersistentIngest
+    W[Alchemy WebSocket] --> X[Fargate Listener]
+    X --> Y[SQS or Kinesis]
   end
-  K --> C[Ingest Lambda / Consumers]
-  C --> D[DynamoDB - Transactions]
-  C --> E[DynamoDB - WalletBuckets]
-  C -->|on threshold| F[SNS Topic]
+  Y --> C[Stream Consumers]
+  C --> D[DynamoDB Transactions]
+  C --> E[DynamoDB WalletBuckets]
+  C --> F[SNS Topic]
   F --> G[Notifier Lambda]
-  G --> H[Notifier Lambda - SNS subscribers: Slack, Email, Webhook]
-  subgraph Observability
-    I[CloudWatch Logs & Metrics]
-  end
-  B & C & G --> I
-  ```
+  G --> H[Multi Channel Alerts]
+  X --> I[CloudWatch]
+  C --> I
+  G --> I
+```
 
-When this makes sense
-- This version trades higher cost for better control and scalability:
-- Fargate maintains a persistent WebSocket connection
-- SQS or Kinesis buffers events and absorbs spikes
-
-Better suited for:
-- High event rates
-- Strict ordering or durability requirements
-- Long-running WebSocket ingestion
-
-This is not the default because:
-- Fargate runs continuously
-- Kinesis adds cost and operational complexity
-
-**Design philosophy**
-- Start cheap and simple
-- Prefer serverless and managed services
-- Add complexity only when requirements justify it
-- This mirrors real-world cloud decision making.
-
-**Repository layout**
-  - `README.md` - project overview and instructions
-  - `services/` - serverless services (each with its own `package.json`, `src/`, `test/`, and `dist/`)
-    - `services/ingest/` - ingestion Lambda (source, tests, mock payloads, build output)
-    - `services/notifier/` - notifier Lambda (notification delivery logic)
-  - `infra/terraform/` - Terraform configuration for API Gateway, DynamoDB, SNS, Lambdas
-  - `test/` - shared integration tests and `mock_payloads/` for end-to-end testing
-  - `.github/workflows/` - CI (build, test, terraform plan)
-  - `scripts/` - helper scripts (build, package, deploy)
-  - `env.example` - documented environment variable names and example values
-
-**Who this project is for**
-
-This project is designed as a learning-focused, portfolio-ready example for:
-- Junior developers exploring AWS serverless architectures
-- Developers transitioning from local scripts to cloud-native designs
-- Develop architectural thinking without over-engineering
-
-**Scope and non-goals**
-
-This project intentionally does NOT aim to:
-- Provide real-time, sub-second blockchain monitoring
-- Handle very high throughput or enterprise-scale workloads
-- Implement complex analytics or historical querying
-
-> **Note:** The ingest Lambda evaluates each tracked wallet for both outgoing and incoming ETH, regardless of counterparty, so alerting is symmetric by design.
-
-Those concerns are discussed in the alternative architecture section but are out of scope for the default implementation.
-
-**Relationship to the original project**
-Inspired by (but not dependent on) the original `eth-watcher` repo: https://github.com/yermakovsa/eth-watcher . We borrowed a few ideas—basic parsing, aggregation concepts, some config naming—but rebuilt the solution for a different problem: tracking a single wallet’s ETH flow in both directions on a fully serverless stack. This codebase is intentionally standalone, uses typed Alchemy webhooks instead of WebSockets, and makes different architectural trade-offs (API Gateway + Lambda + DynamoDB + SNS versus a persistent worker).
-  ````
+- Adds a long-lived Fargate service to keep WebSockets open without Lambda cold starts.
+- Buffers events with SQS/Kinesis to guarantee ordering and absorb spikes before DynamoDB writes.
+- Keeps the downstream SNS + notifier topology unchanged so additional channels can subscribe without code churn.
+- Trade-offs: higher baseline cost, additional operational surface area (container health, stream retention), but unlocks institutional throughput and deterministic ordering when stakes justify it.
