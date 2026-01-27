@@ -51,8 +51,8 @@ flowchart LR
 ## Repository Structure (MVP)
 - [services/ingest](services/ingest) – Lambda source in `src/mvp`, mock payloads under `mock_events`, Jest unit tests under `test`, bundled output in `dist`.
 - [services/notifier](services/notifier) – Slack notifier Lambda plus focused Jest config and mocks.
-- [services/integrationTests](services/integrationTests) – optional cross-service suites with their own tsconfig/jest config.
 - [infra/terraform](infra/terraform) – API Gateway, Lambda functions, IAM roles, DynamoDB tables, and SNS topic expressed as modules for reproducible deploys.
+- [secrets/](secrets) – placeholder for non-committed configuration (env files, keys, etc.).
 - [README.md](README.md) – this document; treat it as living design documentation.
 
 ```
@@ -64,15 +64,12 @@ serverless-eth-watcher/
 │  │  ├─ mock_events/
 │  │  ├─ src/mvp/
 │  │  └─ test/
-│  ├─ notifier/
-│  │  ├─ src/
-│  │  └─ test/
-│  └─ integrationTests/
-│     ├─ pipeline.integration.test.ts
-│     ├─ ingestNotifier.integration.test.ts
-│     └─ jest.config.cjs
+│  └─ notifier/
+│     ├─ src/
+│     └─ test/
+├─ secrets/
 ├─ README.md
-└─ jest.config.cjs
+└─ coverage/
 ```
 
 ## Delivery & Operations Posture
@@ -80,14 +77,13 @@ serverless-eth-watcher/
 - Cold-start resilience via environment-driven configuration, deterministic mocks, and ability to add Provisioned Concurrency without code changes.
 - Alert pipeline is durable because SNS provides at-least-once delivery and decouples ingestion spikes from Slack rate limits; DLQ hooks are documented in [infra/terraform](infra/terraform).
 
-## Future-ready Extensions
-1. **SQS buffering** between API Gateway and ingest or between SNS and notifier when extreme bursts or Slack rate limits demand smoothing.
-2. **Persistent ingest tier** (Fargate + WebSocket + Kinesis) for institutional throughput; see the earlier alternative diagram for trade-offs.
-3. **Multi-channel notifications** by adding additional subscribers to SNS (Email, PagerDuty, Webhooks) without touching ingest code.
-
 This codebase demonstrates full-stack ownership: typed handlers, automated tests, deterministic mocks, IaC, and clear operational guardrails—all wrapped in a concise serverless MVP that is cheap to run yet easy to extend.
 
-## Alternative Architecture (Scaling Path)
+## Scaling Path & Improvements
+
+1. **SQS buffering layers** can sit between API Gateway → ingest or SNS → notifier to smooth bursts, backpressure Slack, and make retries observable.
+2. **Persistent ingest tier** (Fargate listener + WebSocket + SQS/Kinesis) eliminates cold starts and guarantees ordering for institutional traffic while the existing Lambdas become consumers.
+3. **Channel expansion + playbooks** by adding more SNS subscriptions (Email, PagerDuty, custom webhooks) and attaching DLQs for each target so operational handoffs stay audited.
 
 ```mermaid
 flowchart LR
