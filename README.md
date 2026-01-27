@@ -61,6 +61,16 @@ It is ideal for low to moderate traffic, demos, and early production workloads.
 5. Threshold breaches publish events to SNS
 6. Notifier Lambda sends alerts to configured channels
 
+**Throughput & resilience cheat sheet**
+- The Alchemy webhook can burst dozens of POSTs per second; keep the ingest Lambda warm (Provisioned Concurrency) and DynamoDB on On-Demand capacity so the Lambda keeps up. Cold starts and throttled tables are the typical bottlenecks.
+- SNS absorbs spikes between ingest and notifier: as long as the topic accepts the publish, alerts are durably stored. Attach DLQs to both Lambdas to capture failed invocations instead of silently dropping messages.
+- Slack webhooks rate-limit (~1 msg/sec sustained). If you expect more alerts, either batch messages per wallet or add a buffering queue between the notifier and Slack; otherwise the notifier will retry and eventually land in the DLQ.
+- To prevent message loss under throttling:
+  1. Enable retries + DLQs on API Gateway → Lambda (handled by AWS) and on SNS subscriptions.
+  2. Set reasonable reserved/provisioned concurrency on both Lambdas so they scale with demand.
+  3. Monitor CloudWatch metrics (`Throttles`, `ConcurrentExecutions`, `SNS NumberOfNotificationsFailed`, Slack HTTP status codes) and bump limits before saturation.
+- If throttling appears, add Provisioned Concurrency for steady traffic, increase Lambda memory (faster runtime), and consider SQS buffering (between webhook and ingest, or SNS and notifier) for extreme spikes. This isolates each hop so Alchemy’s throughput never forces end-to-end message loss.
+
 **Data handling assumptions**
 - Only ETH transfers are persisted. Non-ETH assets (USDC, ERC20s, NFTs, etc.) are explicitly ignored so that DynamoDB stores exclusively ETH activity.
 - Payload normalization (addresses, values, decimals, hashes) is assumed to be handled by the Alchemy webhook service. Additional normalization or schema validation is out of scope for this project to keep the ingestion path lean.
