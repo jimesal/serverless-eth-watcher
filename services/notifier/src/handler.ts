@@ -16,27 +16,51 @@ type ThresholdMessage = {
 };
 
 export const handler = async (event: SNSEvent): Promise<void> => {
-  if (!event.Records || event.Records.length === 0) {
-    console.warn("received SNS event with no records");
+  const recordCount = event.Records?.length ?? 0;
+  if (recordCount === 0) {
+    console.warn("notifier.noRecords", { recordCount });
     return;
   }
 
   const deliveries = event.Records.map(async (record, idx) => {
-    const payload = safeParse(record.Sns?.Message);
+    const meta = {
+      recordIndex: idx,
+      messageId: record.Sns?.MessageId,
+      topicArn: record.Sns?.TopicArn,
+    };
+
+    const payload = safeParse(record.Sns?.Message, meta);
     if (!payload) {
-      console.warn("skipping record %d due to invalid JSON", idx);
       return;
     }
 
     if (!isThresholdMessage(payload)) {
-      console.warn("skipping record %d due to unexpected shape", idx);
+      console.warn("notifier.invalidShape", meta);
       return;
     }
 
     try {
+      console.info("notifier.deliverStart", {
+        ...meta,
+        wallet: payload.wallet,
+        direction: payload.direction,
+        txHash: payload.txHash,
+      });
       await postToSlack(payload);
+      console.info("notifier.deliverSuccess", {
+        ...meta,
+        wallet: payload.wallet,
+        direction: payload.direction,
+        txHash: payload.txHash,
+      });
     } catch (err) {
-      console.error("failed to deliver Slack alert", err);
+      console.error("notifier.deliverFailed", {
+        ...meta,
+        wallet: payload.wallet,
+        direction: payload.direction,
+        txHash: payload.txHash,
+        error: (err as Error).message,
+      });
       throw err;
     }
   });
@@ -76,12 +100,18 @@ function formatSlackText(msg: ThresholdMessage): string {
     .join("\n");
 }
 
-function safeParse(raw?: string): unknown | null {
+function safeParse(
+  raw?: string,
+  meta: { recordIndex: number; messageId?: string; topicArn?: string } = { recordIndex: -1 }
+): unknown | null {
   if (!raw) return null;
   try {
     return JSON.parse(raw);
   } catch (err) {
-    console.error("unable to parse SNS message", err);
+    console.error("notifier.invalidJson", {
+      ...meta,
+      error: (err as Error).message,
+    });
     return null;
   }
 }
