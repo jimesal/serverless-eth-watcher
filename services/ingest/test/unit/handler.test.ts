@@ -6,8 +6,8 @@ import {
   roleShuffleActivity,
   singleTxActivity,
   stableBatchActivity,
-} from '../mock_events/wrappedMockEvent';
-import { ASSETS, TRACKED_WALLET } from '../types/alchemyWebhookTypes';
+} from '../../mock_events/wrappedMockEvent';
+import { ASSETS, TRACKED_WALLET } from '../../types/alchemyWebhookTypes';
 
 const cloneEvent = (event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 =>
   JSON.parse(JSON.stringify(event));
@@ -73,7 +73,7 @@ function expectBadRequest(res: unknown, expectedBody: string | RegExp) {
 }
 
 describe('ingest handler (production variant)', () => {
-  let handlerModule: typeof import('../src/handler');
+  let handlerModule: typeof import('../../src/handler');
   let ddbSendMock: jest.Mock;
   let snsSendMock: jest.Mock;
   let insertedItems: Array<Record<string, unknown>>;
@@ -94,7 +94,7 @@ describe('ingest handler (production variant)', () => {
     process.env.BUCKET_SIZE_SECONDS = '60';
     process.env.SNS_TOPIC_ARN = 'arn:aws:sns:us-east-1:111111111111:eth-watcher';
 
-    handlerModule = await import('../src/handler');
+    handlerModule = await import('../../src/handler');
   });
 
   beforeEach(() => {
