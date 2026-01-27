@@ -135,12 +135,12 @@ describe('ingest handler (production variant)', () => {
           });
           return {};
         }
-        if (expr.startsWith('SET lastAlert')) {
+        if (expr.startsWith('SET #lastAlert')) {
           const pk = String(cmd.input?.Key?.pk ?? '');
           const nowVal = cmd.input?.ExpressionAttributeValues?.[':now'] as number;
-          const cooldown = cmd.input?.ExpressionAttributeValues?.[':cd'] as number;
+          const cutoff = cmd.input?.ExpressionAttributeValues?.[':cutoff'] as number;
           const last = lastAlertTimestamps[pk];
-          if (last === undefined || nowVal - last > cooldown) {
+          if (last === undefined || last < cutoff) {
             lastAlertTimestamps[pk] = nowVal;
             return {};
           }

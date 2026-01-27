@@ -73,16 +73,34 @@ export const handler = async (
   try {
     parsedBody = event.body ? JSON.parse(event.body) : {};
   } catch (e) {
+    console.error('ingest.invalidJson', {
+      requestId: event.requestContext?.requestId,
+      error: (e as Error).message,
+    });
     return resp(400, `invalid json: ${(e as Error).message}`);
   }
 
   if (!isAddressActivityWebhookPayload(parsedBody)) {
+    console.warn('ingest.invalidShape', {
+      requestId: event.requestContext?.requestId,
+    });
     return resp(400, "payload does not match AddressActivityWebhook");
   }
 
   const raw = parsedBody;
   const activities = extractEthActivities(raw);
-  if (activities.length === 0) return resp(200, "ignored non-ETH asset");
+  if (activities.length === 0) {
+    console.info('ingest.noEthActivity', {
+      requestId: event.requestContext?.requestId,
+      totalActivities: raw.event.activity.length,
+    });
+    return resp(200, "ignored non-ETH asset");
+  }
+
+  console.info('ingest.beginProcessing', {
+    requestId: event.requestContext?.requestId,
+    ethActivityCount: activities.length,
+  });
 
   const now = Math.floor(Date.now() / 1000);
   const bucketStart = bucketStartEpoch(now, BUCKET_SIZE_SECONDS);
@@ -105,7 +123,11 @@ export const handler = async (
       });
 
       if (alreadyProcessed) {
-        // This tx+direction was already counted; skip bucket update.
+        console.debug('ingest.skippedDuplicate', {
+          requestId: event.requestContext?.requestId,
+          txHash: tx.txHash,
+          direction: t.direction,
+        });
         continue;
       }
 
@@ -118,11 +140,26 @@ export const handler = async (
         now,
       });
 
+      console.debug('ingest.bucketUpdated', {
+        requestId: event.requestContext?.requestId,
+        direction: t.direction,
+        wallet: t.wallet,
+        amountEth: tx.amountEth,
+        bucketStart,
+      });
+
       // 3) Sum window and alert if exceeded + cooldown allows
       const total = await sumWindow({
         direction: t.direction,
         wallet: t.wallet,
         now,
+      });
+
+      console.debug('ingest.windowTotal', {
+        requestId: event.requestContext?.requestId,
+        direction: t.direction,
+        wallet: t.wallet,
+        totalEth: total,
       });
 
       if (SNS_TOPIC_ARN && total >= THRESHOLD_ETH) {
@@ -131,6 +168,15 @@ export const handler = async (
           wallet: t.wallet,
           now,
         });
+
+        if (!okToAlert) {
+          console.info('ingest.cooldownActive', {
+            requestId: event.requestContext?.requestId,
+            direction: t.direction,
+            wallet: t.wallet,
+            totalEth: total,
+          });
+        }
 
         if (okToAlert) {
           const msg: ThresholdMessage = {
@@ -144,6 +190,12 @@ export const handler = async (
             requestId: event.requestContext?.requestId,
           };
           // Don’t fail ingestion if SNS fails
+          console.info('ingest.alertTriggered', {
+            requestId: event.requestContext?.requestId,
+            direction: t.direction,
+            wallet: t.wallet,
+            totalEth: total,
+          });
           try {
             await sns.send(
               new PublishCommand({
@@ -151,13 +203,26 @@ export const handler = async (
                 Message: JSON.stringify(msg),
               })
             );
+            console.debug('ingest.snsPublishSuccess', {
+              requestId: event.requestContext?.requestId,
+              txHash: tx.txHash,
+              direction: t.direction,
+            });
           } catch (e) {
-            console.warn("SNS publish failed:", e);
+            console.error('ingest.snsPublishFailed', {
+              requestId: event.requestContext?.requestId,
+              error: (e as Error).message,
+            });
           }
         }
       }
     }
   }
+
+  console.info('ingest.completed', {
+    requestId: event.requestContext?.requestId,
+    processedActivities: activities.length,
+  });
 
   // Always 200 so webhook sender doesn't retry unnecessarily
   return resp(200, "ok");
@@ -291,12 +356,15 @@ async function checkAndSetCooldown(args: {
       new UpdateCommand({
         TableName: WALLET_BUCKETS_TABLE,
         Key: { pk, sk },
-        UpdateExpression: "SET lastAlert = :now",
+        UpdateExpression: "SET #lastAlert = :now",
         ConditionExpression:
-          "attribute_not_exists(lastAlert) OR :now - lastAlert > :cd",
+          "attribute_not_exists(#lastAlert) OR #lastAlert < :cutoff",
         ExpressionAttributeValues: {
           ":now": args.now,
-          ":cd": COOLDOWN_SECONDS,
+          ":cutoff": args.now - COOLDOWN_SECONDS,
+        },
+        ExpressionAttributeNames: {
+          "#lastAlert": "lastAlert",
         },
       })
     );
