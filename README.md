@@ -45,12 +45,13 @@ flowchart LR
 - **Unit suites per Lambda.**
   - [services/ingest/test/simpleIngestHandler.test.ts](services/ingest/test/simpleIngestHandler.test.ts) and [services/ingest/test/minimalIngestHandler.test.ts](services/ingest/test/minimalIngestHandler.test.ts) run under `npm --prefix services/ingest test`, mocking DynamoDB/SNS primitives while exercising the real handler code.
   - [services/notifier/test/handler.test.ts](services/notifier/test/handler.test.ts) covers Slack payload generation, malformed SNS inputs, and HTTP failure handling.
-- **Integration harness (opt-in).** [services/integrationTests](services/integrationTests) keeps a pipeline spec that wires both Lambdas end-to-end; add its Jest config to the root when extended coverage is required.
+- **Provisioning lambda coverage.** [services/webhook-manager/test/handler.test.ts](services/webhook-manager/test/handler.test.ts) simulates the Alchemy admin API via mocked fetch calls to guarantee we keep provisioning idempotent.
 - Root [jest.config.cjs](jest.config.cjs) fans test runs into each service-specific config so CI can run `npm test` at the repo root.
 
 ## Repository Structure (MVP)
 - [services/ingest](services/ingest) – Lambda source in `src/mvp`, mock payloads under `mock_events`, Jest unit tests under `test`, bundled output in `dist`.
 - [services/notifier](services/notifier) – Slack notifier Lambda plus focused Jest config and mocks.
+- [services/webhook-manager](services/webhook-manager) – provisioning Lambda that ensures Alchemy webhooks exist before events flow into API Gateway.
 - [infra/terraform](infra/terraform) – API Gateway, Lambda functions, IAM roles, DynamoDB tables, and SNS topic expressed as modules for reproducible deploys.
 - [secrets/](secrets) – placeholder for non-committed configuration (env files, keys, etc.).
 - [README.md](README.md) – this document; treat it as living design documentation.
@@ -64,7 +65,10 @@ serverless-eth-watcher/
 │  │  ├─ mock_events/
 │  │  ├─ src/mvp/
 │  │  └─ test/
-│  └─ notifier/
+│  ├─ notifier/
+│  │  ├─ src/
+│  │  └─ test/
+│  └─ webhook-manager/
 │     ├─ src/
 │     └─ test/
 ├─ secrets/
