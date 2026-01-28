@@ -48,7 +48,13 @@ flowchart TB
 - Rolling windows are configurable via environment (`THRESHOLD_ETH`, `WINDOW_SECONDS`, `COOLDOWN_SECONDS`, `BUCKET_SIZE_SECONDS`).
 - Multiple tracked wallets can be configured via the shared `TRACKED_WALLETS` env var. Ingest attaches the specific tracked wallet ID and counterparty to every alert so downstream consumers know which configured wallet triggered it.
 - Wallets are treated symmetrically across `from`/`to`; each hash only counts once because dedupe guards use PK hashes.
-- Schema definitions live under [services/ingest/types/alchemyWebhookTypes.ts](services/ingest/types/alchemyWebhookTypes.ts). That module now exports the runtime guards (`isAddressActivityWebhookPayload`, etc.) so both the production handler and the preserved MVP variant reuse the same validation surface.
+- Schema definitions live under [services/ingest/types/alchemyWebhookTypes.ts](services/ingest/types/alchemyWebhookTypes.ts). That module now exports the runtime guards (`isAddressActivityWebhookPayload`, etc.) so both the production handler and the preserved MVP variant reuse the same validation surface. Common env parsing/response helpers live in [services/shared](services/shared), while each Lambda retains its own `env.ts` to document which variables it needs.
+
+## Environment Knobs
+- **Ingest:** `TRANSACTIONS_TABLE`, `WALLET_BUCKETS_TABLE`, `SNS_TOPIC_ARN`, `THRESHOLD_ETH`, `WINDOW_SECONDS`, `COOLDOWN_SECONDS`, `BUCKET_SIZE_SECONDS`, `TRACKED_WALLETS`.
+- **Notifier:** `SLACK_WEBHOOK_URL`, `APP_NAME`.
+- **Webhook Manager:** `ALCHEMY_ADMIN_API_KEY`, `ALCHEMY_APP_ID`, `ALCHEMY_DELIVERY_URL`, optional `ALCHEMY_API_BASE_URL`, and `TRACKED_WALLETS` (falls back to two sample addresses when unset).
+- These knobs let you swap wallet lists, adjust rolling-window math, or repoint Slack/Alchemy targets without code changes; see each service’s `env.ts` for details.
 
 ## Tests & Quality Gates
 - **Ingest service:** [services/ingest/test/unit](services/ingest/test/unit) and [services/ingest/test/integration](services/ingest/test/integration) focus on the production handler in `src/handler.ts`, while targeted specs inside [services/ingest/test/mvp](services/ingest/test/mvp) (for example [services/ingest/test/mvp/simpleIngestHandler.test.ts](services/ingest/test/mvp/simpleIngestHandler.test.ts)) cover the legacy MVP/minimal runners and the ingest↔notifier handshake. Shared mocks/helpers live in [services/ingest/test/support/testUtils.ts](services/ingest/test/support/testUtils.ts) so every suite pulls from the same cloning, response-assertion, and structured typing helpers.
