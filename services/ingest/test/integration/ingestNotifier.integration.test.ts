@@ -1,14 +1,11 @@
-import type {
-  APIGatewayProxyResultV2,
-  APIGatewayProxyStructuredResultV2,
-  SNSEvent,
-} from "aws-lambda";
+import type { SNSEvent } from "aws-lambda";
 import { PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import {
   buildWrappedEvent,
   cloneAddressActivityPayload,
 } from "../../mock_events/wrappedMockEvent";
 import { ASSETS, WALLET_ADDRESSES } from "../../types/alchemyWebhookTypes";
+import { ensureStructuredResponse } from "../support/testUtils";
 
 const TEST_TIME_SECONDS = 1_733_000_000;
 const ORIGINAL_ENV = { ...process.env };
@@ -69,7 +66,7 @@ describe("ingest ↔ notifier integration", () => {
     (global as any).fetch = fetchMock;
 
     const webhookEvent = buildThresholdCrossingEvent();
-    const ingestResponse = asStructuredResponse(await ingestModule.handler(webhookEvent));
+    const ingestResponse = ensureStructuredResponse(await ingestModule.handler(webhookEvent));
 
     expect(ingestResponse.statusCode).toBe(200);
     expect(snsMessages).not.toHaveLength(0);
@@ -133,15 +130,6 @@ function buildNotifierEvent(message: string, topicArn: string): SNSEvent {
       },
     ],
   };
-}
-
-function asStructuredResponse(
-  res: APIGatewayProxyResultV2,
-): APIGatewayProxyStructuredResultV2 {
-  if (typeof res === "string") {
-    throw new Error("expected structured APIGateway response, received string");
-  }
-  return res;
 }
 
 function createDdbStub() {

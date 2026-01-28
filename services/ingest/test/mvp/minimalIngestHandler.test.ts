@@ -1,12 +1,13 @@
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { mixedAssetsActivity } from '../../mock_events/wrappedMockEvent';
+import { cloneEvent } from '../support/testUtils';
 
 describe('minimal handler tests', () => {
   let mockEvent: APIGatewayProxyEventV2;
   let handlerMod: any;
 
   beforeAll(async () => {
-    mockEvent = JSON.parse(JSON.stringify(mixedAssetsActivity));
+    mockEvent = cloneEvent(mixedAssetsActivity);
 
     process.env.TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE ?? 'test_transactions';
     process.env.WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? 'test_buckets';

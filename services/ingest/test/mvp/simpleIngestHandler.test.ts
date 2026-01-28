@@ -1,8 +1,4 @@
-import type {
-  APIGatewayProxyEventV2,
-  APIGatewayProxyResultV2,
-  APIGatewayProxyStructuredResultV2,
-} from 'aws-lambda';
+import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import {
   duplicatedTransactionsActivity,
@@ -11,49 +7,14 @@ import {
   singleTxActivity,
   stableBatchActivity,
 } from '../../mock_events/wrappedMockEvent';
-import { ASSETS, TRACKED_WALLET } from '../../types/alchemyWebhookTypes';
-
-const cloneEvent = (event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 =>
-  JSON.parse(JSON.stringify(event));
-
-const getActivitiesFromEvent = (event: APIGatewayProxyEventV2): any[] => {
-  if (!event.body) return [];
-  try {
-    const parsed = JSON.parse(event.body);
-    return Array.isArray(parsed?.event?.activity) ? parsed.event.activity : [];
-  } catch {
-    return [];
-  }
-};
-
-const getEthActivities = (event: APIGatewayProxyEventV2): any[] =>
-  getActivitiesFromEvent(event).filter((act) => act.asset === ASSETS.ETH);
-
-const getUniqueEthHashCount = (event: APIGatewayProxyEventV2): number =>
-  new Set(getEthActivities(event).map((act) => act.hash)).size;
-
-function ensureStructured(res: APIGatewayProxyResultV2): APIGatewayProxyStructuredResultV2 {
-  if (typeof res === 'string') {
-    throw new Error('expected structured APIGateway response, received string');
-  }
-  return res;
-}
-
-function expectResponse(res: APIGatewayProxyResultV2, expectedBody: string) {
-  const structured = ensureStructured(res);
-  expect(structured.statusCode).toBe(200);
-  expect(structured.body).toBe(expectedBody);
-}
-
-function expectError(res: APIGatewayProxyResultV2, expectedBody: string | RegExp) {
-  const structured = ensureStructured(res);
-  expect(structured.statusCode).toBe(400);
-  if (expectedBody instanceof RegExp) {
-    expect(structured.body).toMatch(expectedBody);
-  } else {
-    expect(structured.body).toBe(expectedBody);
-  }
-}
+import { TRACKED_WALLET } from '../../types/alchemyWebhookTypes';
+import {
+  cloneEvent,
+  expectError,
+  expectResponse,
+  getEthActivities,
+  getUniqueEthHashCount,
+} from '../support/testUtils';
 
 describe('simple ingest handler tests', () => {
   let handlerModule: typeof import('../../src/mvp/simpleIngestHandler');

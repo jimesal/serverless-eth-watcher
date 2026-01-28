@@ -1,4 +1,4 @@
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { PutCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import {
   duplicatedTransactionsActivity,
@@ -8,10 +8,15 @@ import {
   stableBatchActivity,
   dualTrackedWalletActivity,
 } from '../../mock_events/wrappedMockEvent';
-import { ASSETS, TRACKED_WALLET, WALLET_ADDRESSES } from '../../types/alchemyWebhookTypes';
-
-const cloneEvent = (event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 =>
-  JSON.parse(JSON.stringify(event));
+import { TRACKED_WALLET, WALLET_ADDRESSES } from '../../types/alchemyWebhookTypes';
+import {
+  cloneEvent,
+  expectBadRequest,
+  expectOk,
+  getActivitiesFromEvent,
+  getEthActivities,
+  getUniqueEthHashCount,
+} from '../support/testUtils';
 
 const uniqueTxEvent = (
   event: APIGatewayProxyEventV2,
@@ -30,22 +35,6 @@ const uniqueTxEvent = (
   cloned.body = JSON.stringify(parsed);
   return cloned;
 };
-
-const getActivitiesFromEvent = (event: APIGatewayProxyEventV2): any[] => {
-  if (!event.body) return [];
-  try {
-    const parsed = JSON.parse(event.body);
-    return Array.isArray(parsed?.event?.activity) ? parsed.event.activity : [];
-  } catch {
-    return [];
-  }
-};
-
-const getEthActivities = (event: APIGatewayProxyEventV2): any[] =>
-  getActivitiesFromEvent(event).filter((act) => act.asset === ASSETS.ETH);
-
-const getUniqueEthHashCount = (event: APIGatewayProxyEventV2): number =>
-  new Set(getEthActivities(event).map((act) => act.hash)).size;
 
 const TEST_TRACKED_WALLETS = [TRACKED_WALLET, WALLET_ADDRESSES.trackedSecondary] as const;
 const isTrackedAddress = (address: string): boolean =>
@@ -67,38 +56,6 @@ const buildTrackedDirectionHashes = (activities: any[]): Set<string> =>
       return keys;
     }),
   );
-
-type ApiResponse = APIGatewayProxyResultV2 & { statusCode: number; body: string };
-
-function assertApiResponse(res: unknown): asserts res is ApiResponse {
-  if (!res || typeof res !== 'object') {
-    throw new Error(`expected structured response, received ${String(res)}`);
-  }
-
-  const candidate = res as Partial<ApiResponse>;
-  if (typeof candidate.statusCode !== 'number') {
-    throw new Error('response missing statusCode');
-  }
-  if (typeof candidate.body !== 'string') {
-    throw new Error('response missing body');
-  }
-}
-
-function expectOk(res: unknown, expectedBody: string) {
-  assertApiResponse(res);
-  expect(res.statusCode).toBe(200);
-  expect(res.body).toBe(expectedBody);
-}
-
-function expectBadRequest(res: unknown, expectedBody: string | RegExp) {
-  assertApiResponse(res);
-  expect(res.statusCode).toBe(400);
-  if (expectedBody instanceof RegExp) {
-    expect(res.body).toMatch(expectedBody);
-  } else {
-    expect(res.body).toBe(expectedBody);
-  }
-}
 
 describe('ingest handler (production variant)', () => {
   let handlerModule: typeof import('../../src/handler');
