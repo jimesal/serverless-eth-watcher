@@ -9,6 +9,7 @@ import {
   AddressActivityEntry,
   AddressActivityWebhook,
   ASSETS,
+  isAddressActivityWebhookPayload,
 } from "../../types/alchemyWebhookTypes";
 
 let ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
@@ -209,38 +210,4 @@ function envInt(k: string, def: number): number {
   const v = Number(raw);
   if (!Number.isInteger(v)) throw new Error(`Invalid int env ${k}`);
   return v;
-}
-
-function isAddressActivityWebhookPayload(value: unknown): value is AddressActivityWebhook {
-  if (!value || typeof value !== "object") return false;
-  const payload = value as AddressActivityWebhook;
-
-  if (
-    typeof payload.webhookId !== "string" ||
-    typeof payload.id !== "string" ||
-    typeof payload.createdAt !== "string" ||
-    payload.type !== "ADDRESS_ACTIVITY"
-  ) {
-    return false;
-  }
-
-  if (!payload.event || !Array.isArray(payload.event.activity)) {
-    return false;
-  }
-
-  return payload.event.activity.every(isAddressActivityEntryPayload);
-}
-
-function isAddressActivityEntryPayload(value: unknown): value is AddressActivityEntry {
-  if (!value || typeof value !== "object") return false;
-  const entry = value as AddressActivityEntry;
-  const assetValues = Object.values(ASSETS);
-
-  return (
-    typeof entry.hash === "string" &&
-    typeof entry.fromAddress === "string" &&
-    typeof entry.toAddress === "string" &&
-    typeof entry.value === "number" &&
-    assetValues.includes(entry.asset as (typeof ASSETS)[keyof typeof ASSETS])
-  );
 }

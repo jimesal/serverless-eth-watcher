@@ -12,7 +12,12 @@ import {
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
-import { AddressActivityEntry, AddressActivityWebhook, ASSETS } from "../types/alchemyWebhookTypes";
+import {
+  AddressActivityEntry,
+  AddressActivityWebhook,
+  ASSETS,
+  isAddressActivityWebhookPayload,
+} from "../types/alchemyWebhookTypes";
 import {
   BUCKET_SIZE_SECONDS,
   COOLDOWN_SECONDS,
@@ -484,39 +489,4 @@ function resp(code: number, body: string): APIGatewayProxyResultV2 {
     headers: { "content-type": "text/plain" },
     body,
   };
-}
-
-
-function isAddressActivityWebhookPayload(value: unknown): value is AddressActivityWebhook {
-  if (!value || typeof value !== "object") return false;
-  const payload = value as AddressActivityWebhook;
-
-  if (
-    typeof payload.webhookId !== "string" ||
-    typeof payload.id !== "string" ||
-    typeof payload.createdAt !== "string" ||
-    payload.type !== "ADDRESS_ACTIVITY"
-  ) {
-    return false;
-  }
-
-  if (!payload.event || !Array.isArray(payload.event.activity)) {
-    return false;
-  }
-
-  return payload.event.activity.every(isAddressActivityEntryPayload);
-}
-
-function isAddressActivityEntryPayload(value: unknown): value is AddressActivityEntry {
-  if (!value || typeof value !== "object") return false;
-  const entry = value as AddressActivityEntry;
-  const assetValues = Object.values(ASSETS);
-
-  return (
-    typeof entry.hash === "string" &&
-    typeof entry.fromAddress === "string" &&
-    typeof entry.toAddress === "string" &&
-    typeof entry.value === "number" &&
-    assetValues.includes(entry.asset as (typeof ASSETS)[keyof typeof ASSETS])
-  );
 }
