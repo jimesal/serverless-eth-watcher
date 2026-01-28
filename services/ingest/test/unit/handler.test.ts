@@ -47,8 +47,9 @@ const getEthActivities = (event: APIGatewayProxyEventV2): any[] =>
 const getUniqueEthHashCount = (event: APIGatewayProxyEventV2): number =>
   new Set(getEthActivities(event).map((act) => act.hash)).size;
 
-const TEST_TRACKED_WALLETS = [TRACKED_WALLET, WALLET_ADDRESSES.trackedSecondary];
-const isTrackedAddress = (address: string): boolean => TEST_TRACKED_WALLETS.includes(address);
+const TEST_TRACKED_WALLETS = [TRACKED_WALLET, WALLET_ADDRESSES.trackedSecondary] as const;
+const isTrackedAddress = (address: string): boolean =>
+  TEST_TRACKED_WALLETS.includes(address as (typeof TEST_TRACKED_WALLETS)[number]);
 
 const countTrackedDirections = (activities: any[]): number =>
   activities.reduce((count, activity) => {
@@ -67,13 +68,19 @@ const buildTrackedDirectionHashes = (activities: any[]): Set<string> =>
     }),
   );
 
-function assertApiResponse(res: unknown): asserts res is APIGatewayProxyResultV2 {
+type ApiResponse = APIGatewayProxyResultV2 & { statusCode: number; body: string };
+
+function assertApiResponse(res: unknown): asserts res is ApiResponse {
   if (!res || typeof res !== 'object') {
     throw new Error(`expected structured response, received ${String(res)}`);
   }
 
-  if (typeof (res as APIGatewayProxyResultV2).statusCode !== 'number') {
+  const candidate = res as Partial<ApiResponse>;
+  if (typeof candidate.statusCode !== 'number') {
     throw new Error('response missing statusCode');
+  }
+  if (typeof candidate.body !== 'string') {
+    throw new Error('response missing body');
   }
 }
 

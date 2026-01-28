@@ -1,4 +1,8 @@
-import type { APIGatewayProxyEventV2 } from 'aws-lambda';
+import type {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyResultV2,
+  APIGatewayProxyStructuredResultV2,
+} from 'aws-lambda';
 import { PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import {
   duplicatedTransactionsActivity,
@@ -28,27 +32,26 @@ const getEthActivities = (event: APIGatewayProxyEventV2): any[] =>
 const getUniqueEthHashCount = (event: APIGatewayProxyEventV2): number =>
   new Set(getEthActivities(event).map((act) => act.hash)).size;
 
-function expectResponse(res: unknown, expectedBody: string) {
-  expect(res).toBeDefined();
+function ensureStructured(res: APIGatewayProxyResultV2): APIGatewayProxyStructuredResultV2 {
   if (typeof res === 'string') {
-    throw new Error(`expected structured response, received string: ${res}`);
+    throw new Error('expected structured APIGateway response, received string');
   }
-
-  expect(res.statusCode).toBe(200);
-  expect(res.body).toBe(expectedBody);
+  return res;
 }
 
-function expectError(res: unknown, expectedBody: string | RegExp) {
-  expect(res).toBeDefined();
-  if (typeof res === 'string') {
-    throw new Error(`expected structured response, received string: ${res}`);
-  }
+function expectResponse(res: APIGatewayProxyResultV2, expectedBody: string) {
+  const structured = ensureStructured(res);
+  expect(structured.statusCode).toBe(200);
+  expect(structured.body).toBe(expectedBody);
+}
 
-  expect(res.statusCode).toBe(400);
+function expectError(res: APIGatewayProxyResultV2, expectedBody: string | RegExp) {
+  const structured = ensureStructured(res);
+  expect(structured.statusCode).toBe(400);
   if (expectedBody instanceof RegExp) {
-    expect(res.body).toMatch(expectedBody);
+    expect(structured.body).toMatch(expectedBody);
   } else {
-    expect(res.body).toBe(expectedBody);
+    expect(structured.body).toBe(expectedBody);
   }
 }
 
