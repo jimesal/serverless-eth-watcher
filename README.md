@@ -1,4 +1,4 @@
-﻿# Serverless ETH Watcher
+# Serverless ETH Watcher
 
 Portfolio-scale serverless pipeline that ingests Alchemy webhook events, tracks ETH flow for a target wallet, and emits Slack-ready alerts when rolling thresholds are exceeded. It started as a fork-of-the-ideas from the original [eth-watcher](https://github.com/yermakovsa/eth-watcher) WebSocket runner, but I re-scoped it into a fully serverless design so I could showcase cloud-native tradeoffs. I treat it like a production system: typed contracts, IaC, isolated Lambdas, and deterministic tests per service.
 
