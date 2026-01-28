@@ -60,10 +60,10 @@ flowchart TB
 - **Ingest service:** [services/ingest/test/unit](services/ingest/test/unit) and [services/ingest/test/integration](services/ingest/test/integration) focus on the production handler in `src/handler.ts`, while targeted specs inside [services/ingest/test/mvp](services/ingest/test/mvp) (for example [services/ingest/test/mvp/simpleIngestHandler.test.ts](services/ingest/test/mvp/simpleIngestHandler.test.ts)) cover the legacy MVP/minimal runners and the ingest↔notifier handshake. Shared mocks/helpers live in [services/ingest/test/support/testUtils.ts](services/ingest/test/support/testUtils.ts) so every suite pulls from the same cloning, response-assertion, and structured typing helpers.
 - **Notifier service:** [services/notifier/test/handler.test.ts](services/notifier/test/handler.test.ts) asserts Slack payload formatting, JSON validation, and webhook error handling.
 - **Webhook manager:** [services/webhook-manager/test/handler.test.ts](services/webhook-manager/test/handler.test.ts) mocks the Alchemy admin API to guarantee the provisioning helper issues the right POST payload.
-- Root [jest.config.cjs](jest.config.cjs) fans test runs into each service-specific config so CI can run `npm test` at the repo root.
+- Each service keeps its own `test/` folder so local or CI runners can execute the relevant suites without touching other stacks.
 
 ## Repository Structure
-- [services/ingest](services/ingest) – production ingest Lambda in `src/handler.ts`, shared types under `types/`, mocks under `mock_events/`, and Jest coverage in `test/`. The early-stage MVP variant persists under `src/mvp/` strictly as supporting reference.
+- [services/ingest](services/ingest) – production ingest Lambda in `src/handler.ts`, shared types under `types/`, mocks under `mock_events/`, and service-level tests in `test/`. The early-stage MVP variant persists under `src/mvp/` strictly as supporting reference.
 - [services/notifier](services/notifier) – Slack notifier Lambda with its own env wiring and tests.
 - [services/webhook-manager](services/webhook-manager) – helper Lambda that posts to the Alchemy admin API to create the Address Activity webhook; reruns simply create another webhook pointing to the same delivery URL.
 - [infra/terraform](infra/terraform) – API Gateway, Lambda functions, IAM roles, DynamoDB tables, and SNS topic expressed as modules for reproducible deploys.

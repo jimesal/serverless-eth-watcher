@@ -65,6 +65,10 @@ coverage.out
 coverage/
 *.coverprofile
 
+# Exclude Jest-specific configs
+jest.config.*
+**/jest.config.*
+
 # VS Code Jest data
 .vscode-jest/**
 
