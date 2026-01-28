@@ -27,6 +27,10 @@ describe('simple ingest handler tests', () => {
     // env vars must exist before the handler module is evaluated
     process.env.TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE ?? 'test_transactions';
     process.env.WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? 'test_buckets';
+    process.env.THRESHOLD_ETH = process.env.THRESHOLD_ETH ?? '1.5';
+    process.env.WINDOW_SECONDS = process.env.WINDOW_SECONDS ?? '300';
+    process.env.COOLDOWN_SECONDS = process.env.COOLDOWN_SECONDS ?? '30';
+    process.env.BUCKET_SIZE_SECONDS = process.env.BUCKET_SIZE_SECONDS ?? '60';
 
     handlerModule = await import('../../src/mvp/simpleIngestHandler');
   });

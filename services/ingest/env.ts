@@ -1,21 +1,20 @@
-export const TRANSACTIONS_TABLE = process.env.TRANSACTIONS_TABLE ?? "";
-export const WALLET_BUCKETS_TABLE = process.env.WALLET_BUCKETS_TABLE ?? "";
-export const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN ?? "";
+import {
+	optionalEnv,
+	optionalNumberEnv,
+	parseWalletList,
+	requireEnv,
+	requireNumberEnv,
+} from '../shared/env';
 
-export const THRESHOLD_ETH = Number(process.env.THRESHOLD_ETH);
-export const WINDOW_SECONDS = Number(process.env.WINDOW_SECONDS);
-export const COOLDOWN_SECONDS = Number(process.env.COOLDOWN_SECONDS);
-export const BUCKET_SIZE_SECONDS = Number(process.env.BUCKET_SIZE_SECONDS ?? 60);
+export const TRANSACTIONS_TABLE = requireEnv('TRANSACTIONS_TABLE');
+export const WALLET_BUCKETS_TABLE = requireEnv('WALLET_BUCKETS_TABLE');
+export const SNS_TOPIC_ARN = optionalEnv('SNS_TOPIC_ARN');
+
+export const THRESHOLD_ETH = requireNumberEnv('THRESHOLD_ETH');
+export const WINDOW_SECONDS = requireNumberEnv('WINDOW_SECONDS', { integer: true });
+export const COOLDOWN_SECONDS = requireNumberEnv('COOLDOWN_SECONDS', { integer: true });
+export const BUCKET_SIZE_SECONDS = optionalNumberEnv('BUCKET_SIZE_SECONDS', 60, { integer: true });
 
 export const TRACKED_WALLETS: readonly string[] = Object.freeze(
-	parseWallets(process.env.TRACKED_WALLETS) ?? [],
+	parseWalletList(process.env.TRACKED_WALLETS) ?? [],
 );
-
-function parseWallets(raw?: string): string[] | undefined {
-	if (!raw) return undefined;
-	const list = raw
-		.split(",")
-		.map((entry) => entry.trim())
-		.filter(Boolean);
-	return list.length ? list : undefined;
-}

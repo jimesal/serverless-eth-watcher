@@ -11,6 +11,12 @@ import {
   ASSETS,
   isAddressActivityWebhookPayload,
 } from "../../types/alchemyWebhookTypes";
+import {
+  BUCKET_SIZE_SECONDS,
+  TRANSACTIONS_TABLE,
+  WALLET_BUCKETS_TABLE,
+} from "../../env";
+import { textResponse } from "../../../shared/http";
 
 let ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
@@ -20,10 +26,6 @@ let ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
 export function setDdb(client: any) {
   ddb = client;
 }
-
-const TRANSACTIONS_TABLE = mustEnv("TRANSACTIONS_TABLE");
-const WALLET_BUCKETS_TABLE = mustEnv("WALLET_BUCKETS_TABLE");
-const BUCKET_SIZE_SECONDS = envInt("BUCKET_SIZE_SECONDS", 60);
 
 type Direction = "from" | "to";
 
@@ -44,16 +46,16 @@ export const handler = async (
   try {
     parsedBody = event.body ? JSON.parse(event.body) : {};
   } catch (e) {
-    return resp(400, `invalid json: ${(e as Error).message}`);
+    return textResponse(400, `invalid json: ${(e as Error).message}`);
   }
 
   if (!isAddressActivityWebhookPayload(parsedBody)) {
-    return resp(400, "payload does not match AddressActivityWebhook");
+    return textResponse(400, "payload does not match AddressActivityWebhook");
   }
 
   const raw = parsedBody;
   const activities = extractEthActivities(raw);
-  if (activities.length === 0) return resp(200, "ignored non-ETH asset");
+  if (activities.length === 0) return textResponse(200, "ignored non-ETH asset");
 
   const now = Math.floor(Date.now() / 1000);
   const bucketStart = bucketStartEpoch(now, BUCKET_SIZE_SECONDS);
@@ -95,7 +97,7 @@ export const handler = async (
   }
 
   // Always 200 so webhook sender doesn't retry unnecessarily
-  return resp(200, "ok");
+  return textResponse(200, "ok");
 };
 
 /* ---------------- Parsing ---------------- */
@@ -188,26 +190,4 @@ function bucketStartEpoch(epochSec: number, bucketSizeSec: number): number {
 
 function round9(n: number): number {
   return Math.round(n * 1e9) / 1e9;
-}
-
-function resp(code: number, body: string): APIGatewayProxyResultV2 {
-  return {
-    statusCode: code,
-    headers: { "content-type": "text/plain" },
-    body,
-  };
-}
-
-function mustEnv(k: string): string {
-  const v = (process.env[k] ?? "").trim();
-  if (!v) throw new Error(`Missing env var: ${k}`);
-  return v;
-}
-
-function envInt(k: string, def: number): number {
-  const raw = (process.env[k] ?? "").trim();
-  if (!raw) return def;
-  const v = Number(raw);
-  if (!Number.isInteger(v)) throw new Error(`Invalid int env ${k}`);
-  return v;
 }

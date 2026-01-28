@@ -1,3 +1,5 @@
+import { frozenWalletList, optionalEnv, parseWalletList, requireEnv } from '../../shared/env';
+
 const DEFAULTS = {
   network: 'ETH_MAINNET',
   baseUrl: 'https://dashboard.alchemyapi.io/api',
@@ -16,8 +18,9 @@ export interface WebhookEnvConfig {
   baseUrl: string;
 }
 
-export const TRACKED_WALLETS: readonly string[] = Object.freeze(
-  parseWallets(process.env.TRACKED_WALLETS) ?? FALLBACK_WALLETS,
+export const TRACKED_WALLETS: readonly string[] = frozenWalletList(
+  process.env.TRACKED_WALLETS,
+  FALLBACK_WALLETS,
 );
 
 export function loadWebhookEnvConfig(): WebhookEnvConfig {
@@ -26,23 +29,6 @@ export function loadWebhookEnvConfig(): WebhookEnvConfig {
     appId: requireEnv('ALCHEMY_APP_ID'),
     deliveryUrl: requireEnv('ALCHEMY_DELIVERY_URL'),
     network: DEFAULTS.network,
-    baseUrl: process.env.ALCHEMY_API_BASE_URL ?? DEFAULTS.baseUrl,
+    baseUrl: optionalEnv('ALCHEMY_API_BASE_URL', DEFAULTS.baseUrl),
   };
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable ${name}`);
-  }
-  return value;
-}
-
-function parseWallets(raw?: string): string[] | undefined {
-  if (!raw) return undefined;
-  const list = raw
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  return list.length ? list : undefined;
 }

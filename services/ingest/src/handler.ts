@@ -18,6 +18,7 @@ import {
   ASSETS,
   isAddressActivityWebhookPayload,
 } from "../types/alchemyWebhookTypes";
+import { textResponse } from "../../shared/http";
 import {
   BUCKET_SIZE_SECONDS,
   COOLDOWN_SECONDS,
@@ -95,14 +96,14 @@ export const handler = async (
       requestId: event.requestContext?.requestId,
       error: (e as Error).message,
     });
-    return resp(400, `invalid json: ${(e as Error).message}`);
+    return textResponse(400, `invalid json: ${(e as Error).message}`);
   }
 
   if (!isAddressActivityWebhookPayload(parsedBody)) {
     console.warn('ingest.invalidShape', {
       requestId: event.requestContext?.requestId,
     });
-    return resp(400, "payload does not match AddressActivityWebhook");
+    return textResponse(400, "payload does not match AddressActivityWebhook");
   }
 
   const raw = parsedBody;
@@ -112,7 +113,7 @@ export const handler = async (
       requestId: event.requestContext?.requestId,
       totalActivities: raw.event.activity.length,
     });
-    return resp(200, "ignored non-ETH asset");
+    return textResponse(200, "ignored non-ETH asset");
   }
 
   console.info('ingest.beginProcessing', {
@@ -282,7 +283,7 @@ export const handler = async (
   });
 
   // Always 200 so webhook sender doesn't retry unnecessarily
-  return resp(200, "ok");
+  return textResponse(200, "ok");
 };
 
 /* ---------------- Parsing ---------------- */
@@ -481,12 +482,4 @@ function bucketStartEpoch(epochSec: number, bucketSizeSec: number): number {
 
 function round9(n: number): number {
   return Math.round(n * 1e9) / 1e9;
-}
-
-function resp(code: number, body: string): APIGatewayProxyResultV2 {
-  return {
-    statusCode: code,
-    headers: { "content-type": "text/plain" },
-    body,
-  };
 }

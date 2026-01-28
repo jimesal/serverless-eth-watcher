@@ -2,6 +2,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from 'aws-lambda';
+import { jsonResponse } from '../../shared/http';
 import { TRACKED_WALLETS, loadWebhookEnvConfig } from './env';
 
 const CREATE_WEBHOOK_ROUTE = '/create-webhook';
@@ -24,26 +25,20 @@ export const handler = async (
     const payload = buildCreatePayload(config);
     const webhook = await createWebhook(config, payload);
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: 'Alchemy webhook created',
-        webhookId: webhook.id,
-        network: webhook.network,
-        trackedWallets: payload.addresses.length,
-      }),
-    };
+    return jsonResponse(200, {
+      message: 'Alchemy webhook created',
+      webhookId: webhook.id,
+      network: webhook.network,
+      trackedWallets: payload.addresses.length,
+    });
   } catch (error) {
     console.error('webhookManager.createFailed', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
-        message: 'failed to create webhook',
-        error: error instanceof Error ? error.message : 'unknown error',
-      }),
-    };
+    return jsonResponse(500, {
+      message: 'failed to create webhook',
+      error: error instanceof Error ? error.message : 'unknown error',
+    });
   }
 };
 

@@ -12,5 +12,5 @@
 		"resolveJsonModule": true,
 		"types": ["node", "mocha", "jest"]
 	},
-	"include": ["src/**/*.ts", "test/**/*.ts"]
+	"include": ["src/**/*.ts", "test/**/*.ts", "../shared/**/*.ts"]
 }
