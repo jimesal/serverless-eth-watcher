@@ -3,6 +3,7 @@ import {
   AddressActivityWebhook,
   ASSETS,
   TRACKED_WALLET,
+  SECONDARY_TRACKED_WALLET,
   WALLET_ADDRESSES,
   WalletAddress,
   AssetSymbol,
@@ -78,7 +79,6 @@ function buildWebhookEvent(label: string, activity: AddressActivityEntry[]): Add
 }
 
 const { counterpartyA, counterpartyB } = WALLET_ADDRESSES;
-
 const singleTxActivity = [
   createActivityEntry({
     asset: ASSETS.USDC,
@@ -187,10 +187,46 @@ const directionShuffleActivity = [
   }),
 ];
 
+const dualTrackedWalletActivity = [
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xdual-eth-1',
+    value: 1.8,
+    from: TRACKED_WALLET,
+    to: counterpartyA,
+    logIndex: 13,
+  }),
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xdual-eth-2',
+    value: 2.4,
+    from: counterpartyB,
+    to: TRACKED_WALLET,
+    logIndex: 14,
+  }),
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xdual-eth-3',
+    value: 1.3,
+    from: SECONDARY_TRACKED_WALLET,
+    to: counterpartyB,
+    logIndex: 15,
+  }),
+  createActivityEntry({
+    asset: ASSETS.ETH,
+    hash: '0xdual-eth-4',
+    value: 2.9,
+    from: counterpartyA,
+    to: SECONDARY_TRACKED_WALLET,
+    logIndex: 16,
+  }),
+];
+
 export const singleTxEvent = buildWebhookEvent('single_tx', singleTxActivity);
 export const stableBatchEvent = buildWebhookEvent('stable_batch', stableBatchActivity);
 export const mixedAssetEvent = buildWebhookEvent('mixed_asset', mixedAssetActivity);
 export const roleShuffleEvent = buildWebhookEvent('role_shuffle', directionShuffleActivity);
+export const dualTrackedWalletEvent = buildWebhookEvent('dual_tracked_wallet', dualTrackedWalletActivity);
 
 export const mockAddressActivityEvent = mixedAssetEvent;
 
@@ -199,4 +235,5 @@ export const addressActivityWebhookMocks: AddressActivityWebhook[] = [
   stableBatchEvent,
   mixedAssetEvent,
   roleShuffleEvent,
+  dualTrackedWalletEvent,
 ];

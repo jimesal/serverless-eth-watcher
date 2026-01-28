@@ -6,8 +6,9 @@ import {
   roleShuffleActivity,
   singleTxActivity,
   stableBatchActivity,
+  dualTrackedWalletActivity,
 } from '../../mock_events/wrappedMockEvent';
-import { ASSETS, TRACKED_WALLET } from '../../types/alchemyWebhookTypes';
+import { ASSETS, TRACKED_WALLET, WALLET_ADDRESSES } from '../../types/alchemyWebhookTypes';
 
 const cloneEvent = (event: APIGatewayProxyEventV2): APIGatewayProxyEventV2 =>
   JSON.parse(JSON.stringify(event));
@@ -45,6 +46,26 @@ const getEthActivities = (event: APIGatewayProxyEventV2): any[] =>
 
 const getUniqueEthHashCount = (event: APIGatewayProxyEventV2): number =>
   new Set(getEthActivities(event).map((act) => act.hash)).size;
+
+const TEST_TRACKED_WALLETS = [TRACKED_WALLET, WALLET_ADDRESSES.trackedSecondary];
+const isTrackedAddress = (address: string): boolean => TEST_TRACKED_WALLETS.includes(address);
+
+const countTrackedDirections = (activities: any[]): number =>
+  activities.reduce((count, activity) => {
+    if (isTrackedAddress(activity.fromAddress)) count += 1;
+    if (isTrackedAddress(activity.toAddress)) count += 1;
+    return count;
+  }, 0);
+
+const buildTrackedDirectionHashes = (activities: any[]): Set<string> =>
+  new Set(
+    activities.flatMap((activity) => {
+      const keys: string[] = [];
+      if (isTrackedAddress(activity.fromAddress)) keys.push(`${activity.hash}-from-${activity.fromAddress}`);
+      if (isTrackedAddress(activity.toAddress)) keys.push(`${activity.hash}-to-${activity.toAddress}`);
+      return keys;
+    }),
+  );
 
 function assertApiResponse(res: unknown): asserts res is APIGatewayProxyResultV2 {
   if (!res || typeof res !== 'object') {
@@ -93,6 +114,7 @@ describe('ingest handler (production variant)', () => {
     process.env.COOLDOWN_SECONDS = '30';
     process.env.BUCKET_SIZE_SECONDS = '60';
     process.env.SNS_TOPIC_ARN = 'arn:aws:sns:us-east-1:111111111111:eth-watcher';
+    process.env.TRACKED_WALLETS = TEST_TRACKED_WALLETS.join(',');
 
     handlerModule = await import('../../src/handler');
   });
@@ -227,7 +249,7 @@ describe('ingest handler (production variant)', () => {
 
       expectOk(res, 'ok');
 
-      const expectedRecords = ethActivities.length * 2;
+      const expectedRecords = countTrackedDirections(ethActivities);
       expect(insertedItems).toHaveLength(expectedRecords);
       expect(bucketUpdates).toHaveLength(expectedRecords);
 
@@ -237,8 +259,11 @@ describe('ingest handler (production variant)', () => {
         return acc;
       }, {});
 
-      expect(directionCounts.from).toBe(ethActivities.length);
-      expect(directionCounts.to).toBe(ethActivities.length);
+      const trackedFrom = ethActivities.filter((act) => act.fromAddress === TRACKED_WALLET).length;
+      const trackedTo = ethActivities.filter((act) => act.toAddress === TRACKED_WALLET).length;
+
+      expect(directionCounts.from).toBe(trackedFrom);
+      expect(directionCounts.to).toBe(trackedTo);
 
       const uniqueTransactionDirections = new Set(insertedItems.map((i) => i.pk));
       expect(uniqueTransactionDirections.size).toBe(expectedRecords);
@@ -253,7 +278,7 @@ describe('ingest handler (production variant)', () => {
 
       expectOk(res, 'ok');
 
-      const expectedRecords = ethActivities.length * 2;
+      const expectedRecords = countTrackedDirections(ethActivities);
       expect(insertedItems).toHaveLength(expectedRecords);
       expect(bucketUpdates).toHaveLength(expectedRecords);
 
@@ -277,7 +302,8 @@ describe('ingest handler (production variant)', () => {
 
       expectOk(res, 'ok');
 
-      const expectedRecords = uniqueEthCount * 2;
+      const trackedDirectionHashes = buildTrackedDirectionHashes(getEthActivities(duplicatedEvent));
+      const expectedRecords = trackedDirectionHashes.size;
       expect(insertedItems).toHaveLength(expectedRecords);
       expect(bucketUpdates).toHaveLength(expectedRecords);
 
@@ -328,6 +354,45 @@ describe('ingest handler (production variant)', () => {
       await handlerModule.handler(uniqueTxEvent(mixedAssetsActivity, 'cooldown-expire-2'));
 
       expect(snsMessages).toHaveLength(2);
+    });
+
+    test('publishes counterparty details for multiple tracked wallets', async () => {
+      enqueueTotals(2.0, 2.1, 2.2, 2.3);
+
+      const event = cloneEvent(dualTrackedWalletActivity);
+      const res = await handlerModule.handler(event);
+
+      expectOk(res, 'ok');
+      expect(snsMessages).toHaveLength(4);
+
+      const parsed = snsMessages.map((entry) => JSON.parse(entry.Message ?? '{}'));
+
+      const byWallet = parsed.reduce<Record<string, typeof parsed>>((acc, msg) => {
+        const key = msg.wallet as string;
+        acc[key] = acc[key] ?? [];
+        acc[key].push(msg);
+        return acc;
+      }, {});
+
+      const primary = byWallet[TRACKED_WALLET];
+      const secondary = byWallet[WALLET_ADDRESSES.trackedSecondary];
+
+      expect(primary).toHaveLength(2);
+      expect(secondary).toHaveLength(2);
+
+      const primaryDirections = primary.map((msg) => msg.direction).sort();
+      expect(primaryDirections).toEqual(['from', 'to']);
+      expect(primary.find((msg) => msg.direction === 'from')?.counterparty).toBe(WALLET_ADDRESSES.counterpartyA);
+      expect(primary.find((msg) => msg.direction === 'to')?.counterparty).toBe(WALLET_ADDRESSES.counterpartyB);
+
+      const secondaryDirections = secondary.map((msg) => msg.direction).sort();
+      expect(secondaryDirections).toEqual(['from', 'to']);
+      expect(secondary.find((msg) => msg.direction === 'from')?.counterparty).toBe(WALLET_ADDRESSES.counterpartyB);
+      expect(secondary.find((msg) => msg.direction === 'to')?.counterparty).toBe(WALLET_ADDRESSES.counterpartyA);
+
+      const trackedIndexes = new Set(parsed.map((msg) => msg.trackedWalletIndex));
+      expect(trackedIndexes.has(0)).toBe(true);
+      expect(trackedIndexes.has(1)).toBe(true);
     });
   });
 });

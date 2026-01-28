@@ -18,6 +18,7 @@ import {
   COOLDOWN_SECONDS,
   SNS_TOPIC_ARN,
   THRESHOLD_ETH,
+  TRACKED_WALLETS,
   TRANSACTIONS_TABLE,
   WALLET_BUCKETS_TABLE,
   WINDOW_SECONDS,
@@ -51,16 +52,32 @@ type ParsedActivity = {
 
 type IncomingBody = AddressActivityWebhook;
 
+type BaseTarget = {
+  direction: Direction;
+  wallet: string;
+  counterparty: string;
+};
+
+type TargetContext = BaseTarget & {
+  trackedWallet?: string;
+  trackedWalletIndex?: number;
+};
+
 type ThresholdMessage = {
   txHash: string;
   direction: Direction;
   wallet: string;
+  trackedWalletIndex?: number;
+  counterparty?: string;
   totalEth: number;
   windowSec: number;
   timestamp: number;
   source: "alchemy-webhook";
   requestId?: string;
 };
+
+const TRACKED_WALLET_LOOKUP = buildTrackedWalletLookup(TRACKED_WALLETS);
+const HAS_TRACKED_WALLETS = TRACKED_WALLET_LOOKUP.size > 0;
 
 export const handler = async (
   event: APIGatewayProxyEventV2
@@ -96,23 +113,36 @@ export const handler = async (
   console.info('ingest.beginProcessing', {
     requestId: event.requestContext?.requestId,
     ethActivityCount: activities.length,
+    trackedWalletsConfigured: TRACKED_WALLETS.length,
   });
 
   const now = Math.floor(Date.now() / 1000);
   const bucketStart = bucketStartEpoch(now, BUCKET_SIZE_SECONDS);
+  const observedTrackedWallets = new Set<string>();
 
   for (const tx of activities) {
-    const targets: Array<{ direction: Direction; wallet: string }> = [
-      { direction: "from", wallet: tx.from },
-      { direction: "to", wallet: tx.to },
-    ];
+    const targets = selectTargets(tx);
+
+    if (targets.length === 0) {
+      console.debug('ingest.activitySkippedNoTrackedWallet', {
+        requestId: event.requestContext?.requestId,
+        txHash: tx.txHash,
+        trackedWalletsConfigured: TRACKED_WALLETS.length,
+      });
+      continue;
+    }
 
     for (const t of targets) {
+      const walletAddress = t.trackedWallet ?? t.wallet;
+      if (t.trackedWallet) {
+        observedTrackedWallets.add(t.trackedWallet.toLowerCase());
+      }
+
       // 1) Idempotency: Put tx record only if new (txHash+direction)
       const alreadyProcessed = await putTransactionIfNew({
         txHash: tx.txHash,
         direction: t.direction,
-        wallet: t.wallet,
+        wallet: walletAddress,
         amountEth: tx.amountEth,
         ts: now,
         raw,
@@ -123,6 +153,8 @@ export const handler = async (
           requestId: event.requestContext?.requestId,
           txHash: tx.txHash,
           direction: t.direction,
+          trackedWallet: t.trackedWallet,
+          trackedWalletIndex: t.trackedWalletIndex,
         });
         continue;
       }
@@ -130,7 +162,7 @@ export const handler = async (
       // 2) Add to bucket sum (rolling window implemented as bucketed counters)
       await addToWalletBucket({
         direction: t.direction,
-        wallet: t.wallet,
+        wallet: walletAddress,
         bucketStart,
         amountEth: tx.amountEth,
         now,
@@ -139,7 +171,10 @@ export const handler = async (
       console.debug('ingest.bucketUpdated', {
         requestId: event.requestContext?.requestId,
         direction: t.direction,
-        wallet: t.wallet,
+        trackedWallet: t.trackedWallet,
+        trackedWalletIndex: t.trackedWalletIndex,
+        wallet: walletAddress,
+        counterparty: t.counterparty,
         amountEth: tx.amountEth,
         bucketStart,
       });
@@ -147,21 +182,23 @@ export const handler = async (
       // 3) Sum window and alert if exceeded + cooldown allows
       const total = await sumWindow({
         direction: t.direction,
-        wallet: t.wallet,
+        wallet: walletAddress,
         now,
       });
 
       console.debug('ingest.windowTotal', {
         requestId: event.requestContext?.requestId,
         direction: t.direction,
-        wallet: t.wallet,
+        trackedWallet: t.trackedWallet,
+        trackedWalletIndex: t.trackedWalletIndex,
+        wallet: walletAddress,
         totalEth: total,
       });
 
       if (SNS_TOPIC_ARN && total >= THRESHOLD_ETH) {
         const okToAlert = await checkAndSetCooldown({
           direction: t.direction,
-          wallet: t.wallet,
+          wallet: walletAddress,
           now,
         });
 
@@ -169,7 +206,10 @@ export const handler = async (
           console.info('ingest.cooldownActive', {
             requestId: event.requestContext?.requestId,
             direction: t.direction,
-            wallet: t.wallet,
+            trackedWallet: t.trackedWallet,
+            trackedWalletIndex: t.trackedWalletIndex,
+            wallet: walletAddress,
+            counterparty: t.counterparty,
             totalEth: total,
           });
         }
@@ -178,7 +218,9 @@ export const handler = async (
           const msg: ThresholdMessage = {
             txHash: tx.txHash,
             direction: t.direction,
-            wallet: t.wallet,
+            wallet: walletAddress,
+            trackedWalletIndex: t.trackedWalletIndex,
+            counterparty: t.counterparty,
             totalEth: total,
             windowSec: WINDOW_SECONDS,
             timestamp: now,
@@ -189,7 +231,10 @@ export const handler = async (
           console.info('ingest.alertTriggered', {
             requestId: event.requestContext?.requestId,
             direction: t.direction,
-            wallet: t.wallet,
+            trackedWallet: t.trackedWallet,
+            trackedWalletIndex: t.trackedWalletIndex,
+            wallet: walletAddress,
+            counterparty: t.counterparty,
             totalEth: total,
           });
           try {
@@ -203,11 +248,21 @@ export const handler = async (
               requestId: event.requestContext?.requestId,
               txHash: tx.txHash,
               direction: t.direction,
+              trackedWallet: t.trackedWallet,
+              trackedWalletIndex: t.trackedWalletIndex,
+              wallet: walletAddress,
+              counterparty: t.counterparty,
             });
           } catch (e) {
             console.error('ingest.snsPublishFailed', {
               requestId: event.requestContext?.requestId,
+              txHash: tx.txHash,
+              direction: t.direction,
               error: (e as Error).message,
+              trackedWallet: t.trackedWallet,
+              trackedWalletIndex: t.trackedWalletIndex,
+              wallet: walletAddress,
+              counterparty: t.counterparty,
             });
           }
         }
@@ -218,6 +273,7 @@ export const handler = async (
   console.info('ingest.completed', {
     requestId: event.requestContext?.requestId,
     processedActivities: activities.length,
+    trackedWalletMatches: observedTrackedWallets.size,
   });
 
   // Always 200 so webhook sender doesn't retry unnecessarily
@@ -235,6 +291,32 @@ function extractEthActivities(input: IncomingBody): ParsedActivity[] {
       to: activity.toAddress,
       amountEth: activity.value,
     }));
+}
+
+function selectTargets(tx: ParsedActivity): TargetContext[] {
+  const annotated = [
+    annotateTarget({ direction: "from", wallet: tx.from, counterparty: tx.to }),
+    annotateTarget({ direction: "to", wallet: tx.to, counterparty: tx.from }),
+  ];
+
+  if (!HAS_TRACKED_WALLETS) {
+    return annotated;
+  }
+
+  return annotated.filter((target) => Boolean(target.trackedWallet));
+}
+
+function annotateTarget(target: BaseTarget): TargetContext {
+  const normalized = normalizeAddress(target.wallet);
+  const tracked = normalized ? TRACKED_WALLET_LOOKUP.get(normalized) : undefined;
+  if (!tracked) {
+    return target;
+  }
+  return {
+    ...target,
+    trackedWallet: tracked.address,
+    trackedWalletIndex: tracked.index,
+  };
 }
 
 /* ---------------- DynamoDB: Transactions (idempotency) ---------------- */
@@ -372,6 +454,21 @@ async function checkAndSetCooldown(args: {
 }
 
 /* ---------------- Helpers ---------------- */
+
+function buildTrackedWalletLookup(list: readonly string[]) {
+  const lookup = new Map<string, { address: string; index: number }>();
+  list.forEach((address, index) => {
+    const normalized = normalizeAddress(address);
+    if (!normalized || lookup.has(normalized)) return;
+    lookup.set(normalized, { address, index });
+  });
+  return lookup;
+}
+
+function normalizeAddress(value?: string): string | undefined {
+  if (!value) return undefined;
+  return value.trim().toLowerCase();
+}
 
 function bucketStartEpoch(epochSec: number, bucketSizeSec: number): number {
   return Math.floor(epochSec / bucketSizeSec) * bucketSizeSec;

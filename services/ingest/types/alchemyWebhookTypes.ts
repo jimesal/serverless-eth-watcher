@@ -34,11 +34,13 @@ export type AssetSymbol = (typeof ASSETS)[keyof typeof ASSETS];
 
 export const WALLET_ADDRESSES = {
   tracked: '0x1111111111111111111111111111111111111111',
+  trackedSecondary: '0x4444444444444444444444444444444444444444',
   counterpartyA: '0x2222222222222222222222222222222222222222',
   counterpartyB: '0x3333333333333333333333333333333333333333',
 } as const;
 
 export const TRACKED_WALLET = WALLET_ADDRESSES.tracked;
+export const SECONDARY_TRACKED_WALLET = WALLET_ADDRESSES.trackedSecondary;
 
 export type WalletAddress = (typeof WALLET_ADDRESSES)[keyof typeof WALLET_ADDRESSES];
 

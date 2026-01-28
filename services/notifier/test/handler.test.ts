@@ -7,6 +7,8 @@ const baseMessage = {
   txHash: '0xabc',
   direction: 'from' as const,
   wallet: '0x111',
+  trackedWalletIndex: 0,
+  counterparty: '0x222',
   totalEth: 3.5,
   windowSec: 600,
   timestamp: 1_700_000_000,
@@ -94,7 +96,8 @@ describe('notifier handler', () => {
     expect(url).toBe(process.env.SLACK_WEBHOOK_URL);
     const body = JSON.parse(init?.body ?? '{}');
     expect(body.text).toContain('*unit-notifier* alert (outbound)');
-    expect(body.text).toContain('Wallet: 0x111');
+    expect(body.text).toContain('Tracked Wallet #1: 0x111');
+    expect(body.text).toContain('Counterparty: 0x222');
     expect(body.text).toContain('Rolling Total: 3.5000 ETH in 10.0 min');
   });
 

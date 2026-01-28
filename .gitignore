@@ -36,6 +36,7 @@ crash.log
 
 # Node (if used)
 node_modules/
+**/node_modules/
 
 # Docker
 docker-compose.override.yml
@@ -64,9 +65,6 @@ coverage.out
 coverage/
 *.coverprofile
 
-# Jest configs (managed locally per developer)
-jest.config.*
-**/jest.config.*
 # VS Code Jest data
 .vscode-jest/**
 

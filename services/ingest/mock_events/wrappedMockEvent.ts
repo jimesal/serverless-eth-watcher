@@ -7,6 +7,7 @@ import {
   roleShuffleEvent,
   singleTxEvent,
   stableBatchEvent,
+  dualTrackedWalletEvent,
 } from "./alchemyMockEvents";
 
 const baseEnvelope: APIGatewayProxyEventV2 = {
@@ -78,6 +79,7 @@ export const singleTxActivity = buildWrappedEvent({ body: singleTxEvent });
 export const stableBatchActivity = buildWrappedEvent({ body: stableBatchEvent });
 export const mixedAssetsActivity = buildWrappedEvent({ body: mixedAssetEvent });
 export const roleShuffleActivity = buildWrappedEvent({ body: roleShuffleEvent });
+export const dualTrackedWalletActivity = buildWrappedEvent({ body: dualTrackedWalletEvent });
 
 const noEthBody = cloneAddressActivityPayload();
 noEthBody.event.activity = noEthBody.event.activity.map((activity) =>

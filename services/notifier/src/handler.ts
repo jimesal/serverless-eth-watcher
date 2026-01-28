@@ -8,6 +8,8 @@ type ThresholdMessage = {
   txHash: string;
   direction: "from" | "to";
   wallet: string;
+  trackedWalletIndex?: number;
+  counterparty?: string;
   totalEth: number;
   windowSec: number;
   timestamp: number;
@@ -45,6 +47,8 @@ export const handler = async (event: SNSEvent): Promise<void> => {
         wallet: payload.wallet,
         direction: payload.direction,
         txHash: payload.txHash,
+        trackedWalletIndex: payload.trackedWalletIndex,
+        counterparty: payload.counterparty,
       });
       await postToSlack(payload);
       console.info("notifier.deliverSuccess", {
@@ -52,6 +56,8 @@ export const handler = async (event: SNSEvent): Promise<void> => {
         wallet: payload.wallet,
         direction: payload.direction,
         txHash: payload.txHash,
+        trackedWalletIndex: payload.trackedWalletIndex,
+        counterparty: payload.counterparty,
       });
     } catch (err) {
       console.error("notifier.deliverFailed", {
@@ -59,6 +65,8 @@ export const handler = async (event: SNSEvent): Promise<void> => {
         wallet: payload.wallet,
         direction: payload.direction,
         txHash: payload.txHash,
+        trackedWalletIndex: payload.trackedWalletIndex,
+        counterparty: payload.counterparty,
         error: (err as Error).message,
       });
       throw err;
@@ -87,10 +95,15 @@ function formatSlackText(msg: ThresholdMessage): string {
   const eth = msg.totalEth.toFixed(4);
   const windowMin = (msg.windowSec / 60).toFixed(1);
   const timestamp = new Date(msg.timestamp * 1000).toISOString();
+  const trackedLabel =
+    msg.trackedWalletIndex !== undefined
+      ? `Tracked Wallet #${msg.trackedWalletIndex + 1}: ${msg.wallet}`
+      : `Tracked Wallet: ${msg.wallet}`;
 
   return [
     `*${APP_NAME}* alert (${direction})`,
-    `Wallet: ${msg.wallet}`,
+    trackedLabel,
+    msg.counterparty ? `Counterparty: ${msg.counterparty}` : undefined,
     `Tx Hash: ${msg.txHash}`,
     `Rolling Total: ${eth} ETH in ${windowMin} min`,
     `Observed: ${timestamp}`,

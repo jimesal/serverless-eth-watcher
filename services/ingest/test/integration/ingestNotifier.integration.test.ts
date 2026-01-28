@@ -37,6 +37,7 @@ describe("ingest ↔ notifier integration", () => {
       BUCKET_SIZE_SECONDS: "60",
       SLACK_WEBHOOK_URL: "https://hooks.slack.test/services/T000/B000/XXX",
       APP_NAME: "integration-watcher",
+      TRACKED_WALLETS: WALLET_ADDRESSES.tracked,
     };
 
     const ingestModule: typeof import("../../src/handler") = await import(
@@ -83,7 +84,8 @@ describe("ingest ↔ notifier integration", () => {
     expect(url).toBe(process.env.SLACK_WEBHOOK_URL);
 
     const body = JSON.parse(init?.body ?? "{}");
-    expect(body.text).toContain(WALLET_ADDRESSES.tracked);
+    expect(body.text).toContain(`Tracked Wallet #1: ${WALLET_ADDRESSES.tracked}`);
+    expect(body.text).toContain(`Counterparty: ${WALLET_ADDRESSES.counterpartyA}`);
     expect(body.text).toContain("Rolling Total: 3.5000 ETH in 5.0 min");
   });
 });
