@@ -9,24 +9,6 @@ Portfolio-scale serverless pipeline that ingests Alchemy webhook events, tracks 
 - Keep operating cost near zero by leveraging On-Demand billing, zero-idle compute, and IaC reproducibility.
 - Provide clear upgrade paths that demonstrate full-stack and cloud-architecture thinking.
 
-## Improvements over the original eth-watcher
-
-This project is a cloud-native, serverless evolution of the original long-running ETH watcher. The core improvements are architectural and operational:
-
-- **Event-driven & serverless:** replaced a persistent WebSocket process with Alchemy webhooks + AWS Lambda, enabling zero idle compute, automatic scaling, and a simpler operational model.
-- **Durable aggregation & deduplication:** moved from in-memory aggregation to DynamoDB-backed state, enabling safe retries, deduplication, cooldown windows, and historical inspection.
-- **Clear service boundaries:** split responsibilities into independent services (ingestion, aggregation & persistence, notification), which are easier to extend, test, and reason about.
-- **Pluggable notifications:** introduced SNS as an alerting backbone to decouple event detection from delivery (Slack today, extensible to email, PagerDuty, etc.).
-- **Infrastructure as Code:** full Terraform-managed AWS infrastructure for reproducible deployments and environment parity.
-- **Production-oriented design:** runtime validation of webhook payloads, explicit idempotency and failure handling, and unit/integration testing per service.
-
-### Trade-offs
-
-- Increased architectural complexity and AWS coupling compared to a single binary.
-- Slightly higher latency due to serverless execution and fan-out.
-
-Overall, the system trades simplicity for durability, extensibility, and operational robustness, making it better suited for real-world, cloud-native usage.
-
 ## Architecture
 
 ```mermaid
@@ -56,6 +38,24 @@ flowchart TB
 - **API Gateway:** HTTP API endpoint for Alchemy webhook delivery. Deployed as `eth-watcher-api`.
 - **Observability:** CloudWatch metrics/logs on both handlers plus explicit structured logs inside mocks to surface replayable payloads.
 
+## Improvements over the original eth-watcher
+
+This project is a cloud-native, serverless evolution of the original long-running ETH watcher. The core improvements are architectural and operational:
+
+- **Event-driven & serverless:** replaced a persistent WebSocket process with Alchemy webhooks + AWS Lambda, enabling zero idle compute, automatic scaling, and a simpler operational model.
+- **Durable aggregation & deduplication:** moved from in-memory aggregation to DynamoDB-backed state, enabling safe retries, deduplication, cooldown windows, and historical inspection.
+- **Clear service boundaries:** split responsibilities into independent services (ingestion, aggregation & persistence, notification), which are easier to extend, test, and reason about.
+- **Pluggable notifications:** introduced SNS as an alerting backbone to decouple event detection from delivery (Slack today, extensible to email, PagerDuty, etc.).
+- **Infrastructure as Code:** full Terraform-managed AWS infrastructure for reproducible deployments and environment parity.
+- **Production-oriented design:** runtime validation of webhook payloads, explicit idempotency and failure handling, and unit/integration testing per service.
+
+### Trade-offs
+
+- Increased architectural complexity and AWS coupling compared to a single binary.
+- Slightly higher latency due to serverless execution and fan-out.
+
+Overall, the system trades simplicity for durability, extensibility, and operational robustness, making it better suited for real-world, cloud-native usage.
+
 ## Runtime Flow
 1. (Optional helper) Webhook Manager Lambda posts to the Alchemy admin API to create the Address Activity webhook for the delivery URL.
 2. Alchemy posts a signed Address Activity payload.
@@ -64,18 +64,15 @@ flowchart TB
 5. SNS buffers bursts and retries delivery automatically.
 6. Notifier Lambda turns SNS messages into Slack-compatible JSON and calls the configured webhook, failing fast on non-2xx responses.
 
-## Data + Assumptions
-- Focused exclusively on ETH transfers; ignoring ERC20/NFT assets keeps writes small and deterministic.
-- Rolling windows are configurable via environment (`THRESHOLD_ETH`, `WINDOW_SECONDS`, `COOLDOWN_SECONDS`, `BUCKET_SIZE_SECONDS`).
-- Multiple tracked wallets can be configured via the shared `TRACKED_WALLETS` env var. Ingest attaches the specific tracked wallet ID and counterparty to every alert so downstream consumers know which configured wallet triggered it.
-- Wallets are treated symmetrically across `from`/`to`; each hash only counts once because dedupe guards use PK hashes.
-- Schema definitions live under [services/ingest/types/alchemyWebhookTypes.ts](services/ingest/types/alchemyWebhookTypes.ts). That module now exports the runtime guards (`isAddressActivityWebhookPayload`, etc.) so both the production handler and the preserved MVP variant reuse the same validation surface. Common env parsing/response helpers live in [services/shared](services/shared), while each Lambda retains its own `env.ts` to document which variables it needs.
-
 ## Environment Knobs
 - **Ingest:** `TRANSACTIONS_TABLE`, `WALLET_BUCKETS_TABLE`, `SNS_TOPIC_ARN`, `THRESHOLD_ETH`, `WINDOW_SECONDS`, `COOLDOWN_SECONDS`, `BUCKET_SIZE_SECONDS`, `TRACKED_WALLETS`.
 - **Notifier:** `SLACK_WEBHOOK_URL`, `APP_NAME`.
 - **Webhook Manager:** `ALCHEMY_ADMIN_API_KEY`, `ALCHEMY_APP_ID`, `ALCHEMY_DELIVERY_URL`, optional `ALCHEMY_API_BASE_URL`, and `TRACKED_WALLETS` (falls back to two sample addresses when unset).
 - These knobs let you swap wallet lists, adjust rolling-window math, or repoint Slack/Alchemy targets without code changes; see each service’s `env.ts` for details.
+
+## Infrastructure
+
+For Terraform setup, deployment steps, and module details, see [infra/terraform/README.md](infra/terraform/README.md).
 
 ## Tests & Quality Gates
 - **Ingest service:** [services/ingest/test/unit](services/ingest/test/unit) and [services/ingest/test/integration](services/ingest/test/integration) focus on the production handler in `src/handler.ts`, while targeted specs inside [services/ingest/test/mvp](services/ingest/test/mvp) (for example [services/ingest/test/mvp/simpleIngestHandler.test.ts](services/ingest/test/mvp/simpleIngestHandler.test.ts)) cover the legacy MVP/minimal runners and the ingest↔notifier handshake. Shared mocks/helpers live in [services/ingest/test/support/testUtils.ts](services/ingest/test/support/testUtils.ts) so every suite pulls from the same cloning, response-assertion, and structured typing helpers.
