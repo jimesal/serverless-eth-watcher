@@ -1,39 +1,39 @@
 output "transactions_table_name" {
-  value = aws_dynamodb_table.transactions.name
+  value = module.dynamodb.transactions_table_name
 }
 
 output "wallet_buckets_table_name" {
-  value = aws_dynamodb_table.wallet_buckets.name
+  value = module.dynamodb.wallet_buckets_table_name
 }
 
 output "sns_topic_arn" {
-  value = aws_sns_topic.alerts.arn
+  value = module.sns_alerts.topic_arn
 }
 
 output "http_api_endpoint" {
-  value = aws_apigatewayv2_stage.ingest.invoke_url
+  value = module.api_gateway_ingest.invoke_url
 }
 
 output "ingest_lambda_role_arn" {
-  value = aws_iam_role.ingest_lambda.arn
+  value = module.lambda_ingest.role_arn
 }
 
 output "notifier_lambda_role_arn" {
-  value = aws_iam_role.notifier_lambda.arn
+  value = module.lambda_notifier.role_arn
 }
 
 output "webhook_manager_lambda_role_arn" {
-  value = aws_iam_role.webhook_manager_lambda.arn
+  value = module.lambda_webhook_manager.role_arn
 }
 
 output "ingest_lambda_name" {
-  value = aws_lambda_function.ingest.function_name
+  value = module.lambda_ingest.lambda_function_name
 }
 
 output "notifier_lambda_name" {
-  value = aws_lambda_function.notifier.function_name
+  value = module.lambda_notifier.lambda_function_name
 }
 
 output "webhook_manager_lambda_name" {
-  value = aws_lambda_function.webhook_manager.function_name
+  value = module.lambda_webhook_manager.lambda_function_name
 }
