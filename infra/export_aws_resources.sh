@@ -25,7 +25,7 @@ echo ""
 
 # ============ LAMBDA FUNCTIONS ============
 echo "Extracting Lambda configuration..."
-LAMBDAS=("ingestionHandler" "notifierHandler" "webhookHandler")
+LAMBDAS=("eth-watcher-ingest" "eth-watcher-notifier" "eth-watcher-webhook-manager")
 jq -n '{functions: {}}' > "$OUTPUT_DIR/lambda-config.json"
 
 for func_name in "${LAMBDAS[@]}"; do
@@ -133,7 +133,7 @@ ls -lh "$OUTPUT_DIR"/*.json 2>/dev/null | awk '{print "  " $9 " (" $5 ")"}' || e
 
 echo ""
 echo "Generated files:"
-echo "  • lambda-config.json      - Runtime, memory, timeout, env vars, handler (ingestionHandler, notifierHandler, webhookHandler)"
+echo "  • lambda-config.json      - Runtime, memory, timeout, env vars, handler (eth-watcher-ingest, eth-watcher-notifier, eth-watcher-webhook-manager)"
 echo "  • dynamodb-config.json    - Table schemas, billing mode, keys, attributes (eth-watcher-transactions-table, eth-watcher-buckets-table)"
 echo "  • sns-config.json         - Topic attributes and subscriptions (eth-watcher-alerts)"
 echo "  • apigw-config.json       - API routes, integrations, stages (AlchemyClient)"

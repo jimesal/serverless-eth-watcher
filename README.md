@@ -13,26 +13,28 @@ Portfolio-scale serverless pipeline that ingests Alchemy webhook events, tracks 
 ```mermaid
 flowchart TB
   subgraph Provisioning
-    W[Webhook Manager Lambda] --> X[Alchemy Admin API]
+    W["Webhook Manager Lambda<br/>(eth-watcher-webhook-manager)"] --> X["Alchemy Admin API"]
   end
 
   subgraph Runtime Pipeline
-    A[Alchemy Webhook Delivery] --> B[API Gateway HTTP]
-    B --> C[Ingest Lambda]
-    C --> D[DynamoDB Transactions]
-    C --> E[DynamoDB WalletBuckets]
-    C --> F[SNS Topic]
-    F --> G[Notifier Lambda]
-    G --> H[Slack Webhook]
-    C --> I[CloudWatch Logs]
+    A["Alchemy Webhook Delivery"] --> B["API Gateway HTTP<br/>(eth-watcher-api)"]
+    B --> C["Ingest Lambda<br/>(eth-watcher-ingest)"]
+    C --> D["DynamoDB Transactions<br/>(eth-watcher-transactions-table)"]
+    C --> E["DynamoDB WalletBuckets<br/>(eth-watcher-buckets-table)"]
+    C --> F["SNS Topic<br/>(eth-watcher-alerts)"]
+    F --> G["Notifier Lambda<br/>(eth-watcher-notifier)"]
+    G --> H["Slack Webhook"]
+    C --> I["CloudWatch Logs"]
     G --> I
   end
 ```
 
 - **Webhook Manager Lambda (`services/webhook-manager`):** thin provisioning helper that calls the Alchemy admin API to create the Address Activity webhook for the configured delivery URL. For simplicity it always issues a POST and does **not** check for pre-existing webhooks.
-- **Ingest Lambda (`services/ingest/src/handler.ts`):** validates Alchemy payloads, deduplicates transactions, writes both `from` and `to` perspectives, and aggregates ETH totals into 60-second buckets. The earlier MVP implementation still lives under `services/ingest/src/mvp` purely as supporting reference.
-- **DynamoDB tables:** Open-ended on-demand throughput; per-direction PKs keep reads bounded while a sentinel PK manages cooldowns.
-- **SNS topic + Notifier Lambda:** decouples alert publication from delivery; notifier fans out Slack payloads and surfaces HTTP failures for DLQ handling.
+- **Ingest Lambda (`services/ingest/src/handler.ts`):** validates Alchemy payloads, deduplicates transactions, writes both `from` and `to` perspectives, and aggregates ETH totals into 60-second buckets. Deployed as `eth-watcher-ingest`. The earlier MVP implementation still lives under `services/ingest/src/mvp` purely as supporting reference.
+- **Notifier Lambda:** consumes SNS alerts and delivers to Slack. Deployed as `eth-watcher-notifier`.
+- **DynamoDB tables:** Open-ended on-demand throughput; per-direction PKs keep reads bounded while a sentinel PK manages cooldowns. Deployed as `eth-watcher-transactions-table` and `eth-watcher-buckets-table`.
+- **SNS topic + Notifier Lambda:** decouples alert publication from delivery; notifier fans out Slack payloads and surfaces HTTP failures for DLQ handling. Topic deployed as `eth-watcher-alerts`.
+- **API Gateway:** HTTP API endpoint for Alchemy webhook delivery. Deployed as `eth-watcher-api`.
 - **Observability:** CloudWatch metrics/logs on both handlers plus explicit structured logs inside mocks to surface replayable payloads.
 
 ## Runtime Flow
@@ -63,10 +65,10 @@ flowchart TB
 - Each service keeps its own `test/` folder so local or CI runners can execute the relevant suites without touching other stacks.
 
 ## Repository Structure
-- [services/ingest](services/ingest) – production ingest Lambda in `src/handler.ts`, shared types under `types/`, mocks under `mock_events/`, and service-level tests in `test/`. The early-stage MVP variant persists under `src/mvp/` strictly as supporting reference.
-- [services/notifier](services/notifier) – Slack notifier Lambda with its own env wiring and tests.
-- [services/webhook-manager](services/webhook-manager) – helper Lambda that posts to the Alchemy admin API to create the Address Activity webhook; reruns simply create another webhook pointing to the same delivery URL.
-- [infra/terraform](infra/terraform) – API Gateway, Lambda functions, IAM roles, DynamoDB tables, and SNS topic expressed as modules for reproducible deploys.
+- [services/ingest](services/ingest) – production ingest Lambda in `src/handler.ts`, shared types under `types/`, mocks under `mock_events/`, and service-level tests in `test/`. Deployed as `eth-watcher-ingest`. The early-stage MVP variant persists under `src/mvp/` strictly as supporting reference.
+- [services/notifier](services/notifier) – Slack notifier Lambda with its own env wiring and tests. Deployed as `eth-watcher-notifier`.
+- [services/webhook-manager](services/webhook-manager) – helper Lambda that posts to the Alchemy admin API to create the Address Activity webhook. Deployed as `eth-watcher-webhook-manager`; reruns simply create another webhook pointing to the same delivery URL.
+- [infra/terraform](infra/terraform) – Complete infrastructure as code using Terraform modules: API Gateway (`eth-watcher-api`), Lambda functions, IAM roles, DynamoDB tables (`eth-watcher-transactions-table`, `eth-watcher-buckets-table`), and SNS topic (`eth-watcher-alerts`) for reproducible deploys across environments.
 - [secrets/](secrets) – placeholder for non-committed configuration (env files, keys, etc.).
 - [README.md](README.md) – this document; treat it as living design documentation.
 
@@ -74,28 +76,32 @@ flowchart TB
 serverless-eth-watcher/
 ├─ infra/
 │  └─ terraform/
+│     ├─ modules/
+│     │  ├─ dynamodb/
+│     │  ├─ sns/
+│     │  ├─ lambda_function/
+│     │  └─ api_gateway_http/
+│     └─ export_aws_resources.sh
 ├─ services/
 │  ├─ ingest/
-│  │  ├─ mock_events/
 │  │  ├─ src/
 │  │  │  └─ mvp/
 │  │  ├─ test/
+│  │  │  ├─ unit/
 │  │  │  ├─ integration/
-│  │  │  ├─ mvp/
-│  │  │  └─ unit/
-│  │  └─ types/
+│  │  │  └─ mvp/
+│  │  ├─ types/
+│  │  └─ mock_events/
 │  ├─ notifier/
 │  │  ├─ src/
 │  │  └─ test/
 │  └─ webhook-manager/
 │     ├─ src/
 │     └─ test/
-├─ secrets/
-├─ README.md
 ```
 
 ## Delivery & Operations Posture
-- Terraform state captures the whole stack so environments can be recreated in minutes; IAM least-privilege roles keep blast radius low.
+- Terraform state captures the whole stack so environments can be recreated in minutes; IAM least-privilege roles keep blast radius low. See [infra/terraform](infra/terraform) for the complete IaC setup with all resource names and configuration.
 - Cold-start resilience via environment-driven configuration, deterministic mocks, and ability to add Provisioned Concurrency without code changes.
 - Alert pipeline is durable because SNS provides at-least-once delivery and decouples ingestion spikes from Slack rate limits; DLQ hooks are documented in [infra/terraform](infra/terraform).
 

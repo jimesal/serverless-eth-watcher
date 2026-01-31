@@ -7,9 +7,9 @@ This directory contains Terraform configuration to deploy the Serverless ETH Wat
 The infrastructure consists of:
 
 - **Lambda Functions**:
-  - `ingestionHandler` - Processes Alchemy webhook events, tracks wallet transactions
-  - `notifierHandler` - Sends Slack notifications when alerts trigger
-  - `webhookHandler` - Manages Alchemy webhook subscriptions
+  - `eth-watcher-ingest` - Processes Alchemy webhook events, tracks wallet transactions
+  - `eth-watcher-notifier` - Sends Slack notifications when alerts trigger
+  - `eth-watcher-webhook-manager` - Manages Alchemy webhook subscriptions
 
 - **DynamoDB Tables**:
   - `eth-watcher-transactions-table` - Stores transaction records
@@ -17,7 +17,7 @@ The infrastructure consists of:
 
 - **SNS Topic**: `eth-watcher-alerts` - Pub/sub for alert notifications
 
-- **API Gateway**: `AlchemyClient` - HTTP API endpoint for Alchemy webhooks
+- **API Gateway**: `eth-watcher-api` - HTTP API endpoint for Alchemy webhooks
 
 - **IAM Roles**: Service roles with least-privilege policies for each Lambda
 
@@ -129,12 +129,12 @@ The configuration uses reusable modules:
 
 ### Resource Names
 
-Resource names match the deployed AWS configuration:
-- Lambda: `ingestionHandler`, `notifierHandler`, `webhookHandler`
+Resource names follow a consistent naming convention:
+- Lambda: `eth-watcher-ingest`, `eth-watcher-notifier`, `eth-watcher-webhook-manager`
 - Tables: `eth-watcher-transactions-table`, `eth-watcher-buckets-table`
-- API: `AlchemyClient`
+- API: `eth-watcher-api`
 
-**Note**: This Terraform configuration was aligned with existing AWS resources using the `../export_aws_resources.sh` script, which exports deployed resource configurations to JSON files. This ensures the Terraform code matches the actual production infrastructure, making it safe for other developers to recreate or manage the same architecture.
+These names are controlled by variables in `variables.tf` and can be customized in `terraform.tfvars` if needed.
 
 ### Sensitive Data
 
@@ -195,7 +195,7 @@ The Lambda roles require:
 
 Ensure Lambda permissions allow API Gateway invocation:
 ```bash
-aws lambda get-policy --function-name ingestionHandler
+aws lambda get-policy --function-name eth-watcher-ingest
 ```
 
 ## Additional Resources
