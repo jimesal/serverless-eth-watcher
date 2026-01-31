@@ -11,7 +11,7 @@ variable "handler" {
 variable "runtime" {
   description = "Lambda runtime"
   type        = string
-  default     = "nodejs20.x"
+  default     = "nodejs24.x"
 }
 
 variable "role_name" {

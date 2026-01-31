@@ -47,6 +47,9 @@ infra/terraform/.terraform/**
 infra/terraform/*.tfstate
 infra/terraform/tfplan
 
+# AWS resource exports
+infra/aws_resource_exports/
+
 # Node (if used)
 node_modules/
 **/node_modules/

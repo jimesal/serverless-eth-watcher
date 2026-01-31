@@ -1,0 +1,40 @@
+# Terraform configuration example
+# Copy this file to terraform.tfvars and fill in your actual values
+
+# AWS Region
+aws_region = "us-east-1"
+
+# DynamoDB Table Names
+transactions_table_name   = "eth-watcher-transactions-table"
+wallet_buckets_table_name = "eth-watcher-buckets-table"
+
+# SNS Topic
+sns_topic_name = "eth-watcher-alerts"
+
+# Alert Thresholds (from deployed config)
+threshold_eth      = 0.1
+window_seconds     = 300
+cooldown_seconds   = 30
+bucket_size_seconds = 60
+
+# Tracked Wallets (comma-separated addresses)
+tracked_wallets = [
+  "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+  "0xE592427A0AEce92De3Edee1F18E0157C05861564"
+]
+
+# Slack Webhook URL (SENSITIVE - replace with your actual webhook)
+slack_webhook_url = "https://hooks.slack.com/services/YOUR_WORKSPACE/YOUR_CHANNEL/YOUR_TOKEN"
+
+# Application Name
+app_name = "eth-watcher"
+
+# Alchemy Configuration (SENSITIVE - replace with your actual values)
+alchemy_admin_api_key = "YOUR_ALCHEMY_ADMIN_API_KEY"
+alchemy_app_id        = "YOUR_ALCHEMY_APP_ID"
+
+# Optional: Override the delivery URL (leave empty to use API Gateway URL)
+alchemy_delivery_url_override = ""
+
+# Optional: Override Alchemy API base URL
+alchemy_api_base_url = "https://dashboard.alchemy.com/api"

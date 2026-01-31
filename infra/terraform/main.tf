@@ -33,11 +33,12 @@ module "sns_alerts" {
 
 module "lambda_ingest" {
   source            = "./modules/lambda_function"
-  function_name     = "serverless-eth-watcher-ingest"
-  handler           = "handler.handler"
-  role_name         = "serverless-eth-watcher-ingest"
-  memory_size       = 256
-  timeout           = 20
+  function_name     = "ingestionHandler"
+  handler           = "index.handler"
+  runtime           = "nodejs24.x"
+  role_name         = "ingestionHandler-role"
+  memory_size       = 128
+  timeout           = 3
   filename          = data.archive_file.ingest.output_path
   source_code_hash  = data.archive_file.ingest.output_base64sha256
   environment_variables = {
@@ -83,19 +84,20 @@ module "lambda_ingest" {
 
 module "api_gateway_ingest" {
   source               = "./modules/api_gateway_http"
-  api_name             = "serverless-eth-watcher-ingest"
+  api_name             = "AlchemyClient"
   integration_uri      = module.lambda_ingest.lambda_function_invoke_arn
   lambda_function_name = module.lambda_ingest.lambda_function_name
-  route_key            = "POST /webhook"
+  route_key            = "POST /webhook/alchemy"
 }
 
 module "lambda_notifier" {
   source            = "./modules/lambda_function"
-  function_name     = "serverless-eth-watcher-notifier"
-  handler           = "handler.handler"
-  role_name         = "serverless-eth-watcher-notifier"
+  function_name     = "notifierHandler"
+  handler           = "index.handler"
+  runtime           = "nodejs24.x"
+  role_name         = "notifierHandler-role"
   memory_size       = 128
-  timeout           = 15
+  timeout           = 3
   filename          = data.archive_file.notifier.output_path
   source_code_hash  = data.archive_file.notifier.output_base64sha256
   environment_variables = {
@@ -117,11 +119,12 @@ module "lambda_notifier" {
 
 module "lambda_webhook_manager" {
   source            = "./modules/lambda_function"
-  function_name     = "serverless-eth-watcher-webhook-manager"
-  handler           = "handler.handler"
-  role_name         = "serverless-eth-watcher-webhook-manager"
+  function_name     = "webhookHandler"
+  handler           = "index.handler"
+  runtime           = "nodejs24.x"
+  role_name         = "webhookHandler-role"
   memory_size       = 128
-  timeout           = 60
+  timeout           = 3
   filename          = data.archive_file.webhook_manager.output_path
   source_code_hash  = data.archive_file.webhook_manager.output_base64sha256
   environment_variables = {

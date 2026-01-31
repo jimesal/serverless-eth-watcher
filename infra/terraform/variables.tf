@@ -7,19 +7,19 @@ variable "aws_region" {
 variable "transactions_table_name" {
   description = "DynamoDB Transactions table name"
   type        = string
-  default     = "serverless-eth-transactions"
+  default     = "eth-watcher-transactions-table"
 }
 
 variable "wallet_buckets_table_name" {
   description = "DynamoDB Wallet Buckets table name"
   type        = string
-  default     = "serverless-eth-wallet-buckets"
+  default     = "eth-watcher-buckets-table"
 }
 
 variable "sns_topic_name" {
   description = "SNS topic for alerts"
   type        = string
-  default     = "serverless-eth-alerts"
+  default     = "eth-watcher-alerts"
 }
 
 variable "tracked_wallets" {
@@ -31,19 +31,19 @@ variable "tracked_wallets" {
 variable "threshold_eth" {
   description = "Rolling window threshold (in ETH) that triggers alerts"
   type        = number
-  default     = 10
+  default     = 0.1
 }
 
 variable "window_seconds" {
   description = "Rolling window duration used by the ingest Lambda"
   type        = number
-  default     = 900
+  default     = 300
 }
 
 variable "cooldown_seconds" {
   description = "Cooldown period applied after an alert fires"
   type        = number
-  default     = 300
+  default     = 30
 }
 
 variable "bucket_size_seconds" {
