@@ -3,10 +3,29 @@
 Portfolio-scale serverless pipeline that ingests Alchemy webhook events, tracks ETH flow for any configured set of wallets, and emits Slack-ready alerts when rolling thresholds are exceeded. It started as a fork-of-the-ideas from the original [eth-watcher](https://github.com/yermakovsa/eth-watcher) WebSocket runner, but I re-scoped it into a fully serverless design so I could showcase cloud-native tradeoffs. I treat it like a production system: typed contracts, IaC, isolated Lambdas, and deterministic tests per service.
 
 ## System Goals
+
 - Mirror real-world on-call scenarios: detect anomalous ETH movement for any tracked wallet across `from` and `to` directions.
 - Replace brittle local scripts with scalable managed primitives (API Gateway → Lambda → DynamoDB → SNS → Lambda).
 - Keep operating cost near zero by leveraging On-Demand billing, zero-idle compute, and IaC reproducibility.
 - Provide clear upgrade paths that demonstrate full-stack and cloud-architecture thinking.
+
+## Improvements over the original eth-watcher
+
+This project is a cloud-native, serverless evolution of the original long-running ETH watcher. The core improvements are architectural and operational:
+
+- **Event-driven & serverless:** replaced a persistent WebSocket process with Alchemy webhooks + AWS Lambda, enabling zero idle compute, automatic scaling, and a simpler operational model.
+- **Durable aggregation & deduplication:** moved from in-memory aggregation to DynamoDB-backed state, enabling safe retries, deduplication, cooldown windows, and historical inspection.
+- **Clear service boundaries:** split responsibilities into independent services (ingestion, aggregation & persistence, notification), which are easier to extend, test, and reason about.
+- **Pluggable notifications:** introduced SNS as an alerting backbone to decouple event detection from delivery (Slack today, extensible to email, PagerDuty, etc.).
+- **Infrastructure as Code:** full Terraform-managed AWS infrastructure for reproducible deployments and environment parity.
+- **Production-oriented design:** runtime validation of webhook payloads, explicit idempotency and failure handling, and unit/integration testing per service.
+
+### Trade-offs
+
+- Increased architectural complexity and AWS coupling compared to a single binary.
+- Slightly higher latency due to serverless execution and fan-out.
+
+Overall, the system trades simplicity for durability, extensibility, and operational robustness, making it better suited for real-world, cloud-native usage.
 
 ## Architecture
 
@@ -30,7 +49,7 @@ flowchart TB
 ```
 
 - **Webhook Manager Lambda (`services/webhook-manager`):** thin provisioning helper that calls the Alchemy admin API to create the Address Activity webhook for the configured delivery URL. For simplicity it always issues a POST and does **not** check for pre-existing webhooks.
-- **Ingest Lambda (`services/ingest/src/handler.ts`):** validates Alchemy payloads, deduplicates transactions, writes both `from` and `to` perspectives, and aggregates ETH totals into 60-second buckets. Deployed as `eth-watcher-ingest`. The earlier MVP implementation still lives under `services/ingest/src/mvp` purely as supporting reference.
+- **Ingest Lambda (`services/ingest/src/handler.ts`):** validates Alchemy payloads, deduplicates transactions, writes both `from` and `to` perspectives, and aggregates ETH totals into buckets sized by `BUCKET_SIZE_SECONDS` (default 60 seconds). Deployed as `eth-watcher-ingest`. The earlier MVP implementation still lives under `services/ingest/src/mvp` purely as supporting reference.
 - **Notifier Lambda:** consumes SNS alerts and delivers to Slack. Deployed as `eth-watcher-notifier`.
 - **DynamoDB tables:** Open-ended on-demand throughput; per-direction PKs keep reads bounded while a sentinel PK manages cooldowns. Deployed as `eth-watcher-transactions-table` and `eth-watcher-buckets-table`.
 - **SNS topic + Notifier Lambda:** decouples alert publication from delivery; notifier fans out Slack payloads and surfaces HTTP failures for DLQ handling. Topic deployed as `eth-watcher-alerts`.
@@ -74,30 +93,29 @@ flowchart TB
 
 ```
 serverless-eth-watcher/
-├─ infra/
-│  └─ terraform/
-│     ├─ modules/
-│     │  ├─ dynamodb/
-│     │  ├─ sns/
-│     │  ├─ lambda_function/
-│     │  └─ api_gateway_http/
-│     └─ export_aws_resources.sh
-├─ services/
-│  ├─ ingest/
-│  │  ├─ src/
-│  │  │  └─ mvp/
-│  │  ├─ test/
-│  │  │  ├─ unit/
-│  │  │  ├─ integration/
-│  │  │  └─ mvp/
-│  │  ├─ types/
-│  │  └─ mock_events/
-│  ├─ notifier/
-│  │  ├─ src/
-│  │  └─ test/
-│  └─ webhook-manager/
-│     ├─ src/
-│     └─ test/
+├── infra/
+│   └── terraform/
+│       ├── modules/
+│       │   ├── dynamodb/
+│       │   ├── sns/
+│       │   ├── lambda_function/
+│       │   └── api_gateway_http/
+├── services/
+│   ├── ingest/
+│   │   ├── src/
+│   │   │   └── mvp/
+│   │   ├── test/
+│   │   │   ├── unit/
+│   │   │   ├── integration/
+│   │   │   └── mvp/
+│   │   ├── types/
+│   │   └── mock_events/
+│   ├── notifier/
+│   │   ├── src/
+│   │   └── test/
+│   └── webhook-manager/
+│       ├── src/
+│       └── test/
 ```
 
 ## Delivery & Operations Posture
