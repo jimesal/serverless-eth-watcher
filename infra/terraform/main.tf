@@ -33,10 +33,10 @@ module "sns_alerts" {
 
 module "lambda_ingest" {
   source            = "./modules/lambda_function"
-  function_name     = "ingestionHandler"
+  function_name     = var.ingest_lambda_name
   handler           = "index.handler"
   runtime           = "nodejs24.x"
-  role_name         = "ingestionHandler-role"
+  role_name         = "${var.ingest_lambda_name}-role"
   memory_size       = 128
   timeout           = 3
   filename          = data.archive_file.ingest.output_path
@@ -84,7 +84,7 @@ module "lambda_ingest" {
 
 module "api_gateway_ingest" {
   source               = "./modules/api_gateway_http"
-  api_name             = "AlchemyClient"
+  api_name             = var.api_gateway_name
   integration_uri      = module.lambda_ingest.lambda_function_invoke_arn
   lambda_function_name = module.lambda_ingest.lambda_function_name
   route_key            = "POST /webhook/alchemy"
@@ -92,10 +92,10 @@ module "api_gateway_ingest" {
 
 module "lambda_notifier" {
   source            = "./modules/lambda_function"
-  function_name     = "notifierHandler"
+  function_name     = var.notifier_lambda_name
   handler           = "index.handler"
   runtime           = "nodejs24.x"
-  role_name         = "notifierHandler-role"
+  role_name         = "${var.notifier_lambda_name}-role"
   memory_size       = 128
   timeout           = 3
   filename          = data.archive_file.notifier.output_path
@@ -119,10 +119,10 @@ module "lambda_notifier" {
 
 module "lambda_webhook_manager" {
   source            = "./modules/lambda_function"
-  function_name     = "webhookHandler"
+  function_name     = var.webhook_lambda_name
   handler           = "index.handler"
   runtime           = "nodejs24.x"
-  role_name         = "webhookHandler-role"
+  role_name         = "${var.webhook_lambda_name}-role"
   memory_size       = 128
   timeout           = 3
   filename          = data.archive_file.webhook_manager.output_path

@@ -22,6 +22,30 @@ variable "sns_topic_name" {
   default     = "eth-watcher-alerts"
 }
 
+variable "ingest_lambda_name" {
+  description = "Ingest Lambda function name"
+  type        = string
+  default     = "eth-watcher-ingest"
+}
+
+variable "notifier_lambda_name" {
+  description = "Notifier Lambda function name"
+  type        = string
+  default     = "eth-watcher-notifier"
+}
+
+variable "webhook_lambda_name" {
+  description = "Webhook manager Lambda function name"
+  type        = string
+  default     = "eth-watcher-webhook-manager"
+}
+
+variable "api_gateway_name" {
+  description = "API Gateway name"
+  type        = string
+  default     = "eth-watcher-api"
+}
+
 variable "tracked_wallets" {
   description = "List of wallet addresses monitored by ingest + provisioning helpers"
   type        = list(string)
