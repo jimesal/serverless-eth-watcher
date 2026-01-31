@@ -83,6 +83,20 @@ npm run build
 cd -
 ```
 
+### Optional: One-command build + deploy
+
+You can also use the helper script to build all Lambda artifacts and run Terraform in one step:
+
+```bash
+../deploy.sh
+```
+
+If your tfvars file lives somewhere else, pass the path as the first argument:
+
+```bash
+../deploy.sh /path/to/terraform.tfvars
+```
+
 ## Deployment
 
 ### Initialize Terraform

@@ -25,7 +25,7 @@
   "scripts": {
     "test": "jest --config ./jest.config.cjs",
     "test:watch": "jest --config ./jest.config.cjs --watch",
-    "build": "esbuild src/minimalHandler.ts --bundle --platform=node --outfile=dist/minimalHandler.js --sourcemap",
-    "debug": "npm run build && node --inspect-brk dist/minimalHandler.js"
+    "build": "esbuild src/handler.ts --bundle --platform=node --outfile=dist/handler.js --sourcemap",
+    "debug": "npm run build && node --inspect-brk dist/handler.js"
   }
 }

@@ -18,6 +18,12 @@ variable "route_key" {
   type        = string
 }
 
+variable "delivery_path" {
+  description = "Path appended to the invoke URL for webhook delivery"
+  type        = string
+  default     = "/webhook/alchemy"
+}
+
 variable "stage_name" {
   description = "Stage name"
   type        = string

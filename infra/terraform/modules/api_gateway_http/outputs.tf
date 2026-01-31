@@ -9,3 +9,7 @@ output "execution_arn" {
 output "invoke_url" {
   value = aws_apigatewayv2_stage.this.invoke_url
 }
+
+output "delivery_url" {
+  value = "${aws_apigatewayv2_stage.this.invoke_url}${trim(var.delivery_path, "/")}"
+}

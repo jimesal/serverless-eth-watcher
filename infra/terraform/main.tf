@@ -34,7 +34,7 @@ module "sns_alerts" {
 module "lambda_ingest" {
   source            = "./modules/lambda_function"
   function_name     = var.ingest_lambda_name
-  handler           = "index.handler"
+  handler           = "handler.handler"
   runtime           = "nodejs24.x"
   role_name         = "${var.ingest_lambda_name}-role"
   memory_size       = 128
@@ -88,12 +88,13 @@ module "api_gateway_ingest" {
   integration_uri      = module.lambda_ingest.lambda_function_invoke_arn
   lambda_function_name = module.lambda_ingest.lambda_function_name
   route_key            = "POST /webhook/alchemy"
+  delivery_path        = "/webhook/alchemy"
 }
 
 module "lambda_notifier" {
   source            = "./modules/lambda_function"
   function_name     = var.notifier_lambda_name
-  handler           = "index.handler"
+  handler           = "handler.handler"
   runtime           = "nodejs24.x"
   role_name         = "${var.notifier_lambda_name}-role"
   memory_size       = 128
@@ -120,7 +121,7 @@ module "lambda_notifier" {
 module "lambda_webhook_manager" {
   source            = "./modules/lambda_function"
   function_name     = var.webhook_lambda_name
-  handler           = "index.handler"
+  handler           = "handler.handler"
   runtime           = "nodejs24.x"
   role_name         = "${var.webhook_lambda_name}-role"
   memory_size       = 128
@@ -130,7 +131,7 @@ module "lambda_webhook_manager" {
   environment_variables = {
     ALCHEMY_ADMIN_API_KEY = var.alchemy_admin_api_key
     ALCHEMY_APP_ID        = var.alchemy_app_id
-    ALCHEMY_DELIVERY_URL  = var.alchemy_delivery_url_override != "" ? var.alchemy_delivery_url_override : module.api_gateway_ingest.invoke_url
+    ALCHEMY_DELIVERY_URL  = var.alchemy_delivery_url_override != "" ? var.alchemy_delivery_url_override : module.api_gateway_ingest.delivery_url
     ALCHEMY_API_BASE_URL  = var.alchemy_api_base_url
     TRACKED_WALLETS       = local.tracked_wallets_csv
   }
